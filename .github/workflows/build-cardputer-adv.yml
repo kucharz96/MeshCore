@@ -10,6 +10,15 @@ on:
       - 'examples/**'
       - 'variants/**'
       - '.github/workflows/build-cardputer-adv.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'boards/**'
+      - 'src/**'
+      - 'examples/**'
+      - 'variants/**'
+      - '.github/workflows/build-cardputer-adv.yml'
   workflow_dispatch:
 
 jobs:
