@@ -55,6 +55,14 @@ public:
     return "M5Stack Cardputer-Adv";
   }
 
+  void powerOff() override {
+  #ifdef PIN_USER_BTN
+    enterDeepSleep(0, PIN_USER_BTN);
+  #else
+    enterDeepSleep(0, -1);
+  #endif
+  }
+
   void enterDeepSleep(uint32_t secs, int pin_wake_btn) {
     esp_sleep_enable_ext1_wakeup((1ULL << P_LORA_DIO_1), ESP_EXT1_WAKEUP_ANY_HIGH);
 
