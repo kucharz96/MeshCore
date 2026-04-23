@@ -18,6 +18,8 @@
 #ifdef HAS_GPS
 class CardputerSensorManager : public SensorManager {
   bool gps_active = false;
+  uint32_t gps_interval_secs = 180;
+  mutable char _gps_interval_buf[12] = {0};
   LocationProvider* _location;
 public:
   CardputerSensorManager(LocationProvider &location): _location(&location) { }
