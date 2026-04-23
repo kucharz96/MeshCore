@@ -24,8 +24,8 @@ public:
     cfg.clear_display = true;
     cfg.internal_imu = false;
     cfg.internal_rtc = true;
-    cfg.internal_spk = true;
-    cfg.internal_mic = true;
+    cfg.internal_spk = false;
+    cfg.internal_mic = false;
     M5Cardputer.begin(cfg, true);
     delay(100);
     M5Cardputer.Keyboard.begin();
@@ -56,6 +56,7 @@ public:
   }
 
   void powerOff() override {
+    M5.Display.sleep();
   #ifdef PIN_USER_BTN
     enterDeepSleep(0, PIN_USER_BTN);
   #else
