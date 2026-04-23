@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <stdlib.h>
 #include "target.h"
 #include "../../examples/companion_radio/NodePrefs.h"
 
@@ -16,6 +17,7 @@ static MicroNMEALocationProvider location_provider(Serial1, &rtc_clock);
 CardputerSensorManager sensors(location_provider);
 
 bool CardputerSensorManager::begin() {
+  gps_active = false;
   return true;
 }
 
@@ -27,7 +29,12 @@ bool CardputerSensorManager::querySensors(uint8_t requester_permissions, Cayenne
 }
 
 void CardputerSensorManager::loop() {
-  static long next_gps_update = 0;
+  static unsigned long next_gps_update = 0;
+
+  if (!gps_active) {
+    return;
+  }
+
   _location->loop();
 
   if (millis() > next_gps_update) {
@@ -36,32 +43,42 @@ void CardputerSensorManager::loop() {
       node_lon = ((double)_location->getLongitude()) / 1000000.;
       node_altitude = ((double)_location->getAltitude()) / 1000.0;
     }
-    next_gps_update = millis() + 180000;
+    next_gps_update = millis() + (gps_interval_secs * 1000UL);
   }
 }
 
 int CardputerSensorManager::getNumSettings() const {
-  return 1;
+  return 2;
 }
 
 const char* CardputerSensorManager::getSettingName(int i) const {
-  return i == 0 ? "gps" : NULL;
+  switch (i) {
+    case 0: return "gps";
+    case 1: return "gps_interval";
+    default: return NULL;
+  }
 }
 
 const char* CardputerSensorManager::getSettingValue(int i) const {
-  if (i == 0) {
-    return gps_active ? "1" : "0";
+  switch (i) {
+    case 0:
+      return gps_active ? "1" : "0";
+    case 1:
+      snprintf(_gps_interval_buf, sizeof(_gps_interval_buf), "%lu", (unsigned long)gps_interval_secs);
+      return _gps_interval_buf;
+    default:
+      return NULL;
   }
-  return NULL;
 }
 
 bool CardputerSensorManager::setSettingValue(const char* name, const char* value) {
   if (strcmp(name, "gps") == 0) {
     bool should_enable = (strcmp(value, "0") != 0);
     if (should_enable && !gps_active) {
-      Serial1.setPins(GPS_RX_PIN, GPS_TX_PIN);
-      Serial1.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+      Serial1.setPins(PIN_GPS_RX, PIN_GPS_TX);
+      Serial1.begin(GPS_BAUD_RATE, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
       _location->begin();
+      _location->syncTime();
       gps_active = true;
     } else if (!should_enable && gps_active) {
       _location->stop();
@@ -70,6 +87,13 @@ bool CardputerSensorManager::setSettingValue(const char* name, const char* value
     }
     return true;
   }
+
+  if (strcmp(name, "gps_interval") == 0) {
+    unsigned long parsed = strtoul(value, NULL, 10);
+    gps_interval_secs = parsed > 0 ? parsed : 180;
+    return true;
+  }
+
   return false;
 }
 #else
