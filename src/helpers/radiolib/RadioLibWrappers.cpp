@@ -1,5 +1,6 @@
 
 #define RADIOLIB_STATIC_ONLY 1
+#include <Arduino.h>
 #include "RadioLibWrappers.h"
 
 #define STATE_IDLE       0
@@ -74,6 +75,10 @@ void RadioLibWrapper::resetAGC() {
 }
 
 void RadioLibWrapper::loop() {
+#ifdef MESH_AGC_RESET_INTERVAL_MS
+  static uint32_t last_agc_reset_ms = 0;
+#endif
+
   if (state == STATE_RX && _num_floor_samples < NUM_NOISE_FLOOR_SAMPLES) {
     if (!isReceivingPacket()) {
       int rssi = getCurrentRSSI();
@@ -91,6 +96,16 @@ void RadioLibWrapper::loop() {
 
     MESH_DEBUG_PRINTLN("RadioLibWrapper: noise_floor = %d", (int)_noise_floor);
   }
+
+#ifdef MESH_AGC_RESET_INTERVAL_MS
+  if (state == STATE_RX) {
+    uint32_t now = millis();
+    if ((uint32_t)(now - last_agc_reset_ms) >= MESH_AGC_RESET_INTERVAL_MS) {
+      resetAGC();
+      last_agc_reset_ms = now;
+    }
+  }
+#endif
 }
 
 void RadioLibWrapper::startRecv() {
