@@ -22,6 +22,7 @@ private:
   uint16_t _color = TFT_WHITE;
   uint16_t _light_color = TFT_WHITE;
   uint16_t _dark_color = TFT_BLACK;
+  uint16_t _bg_color = TFT_BLACK;
   static const uint16_t SCREEN_WIDTH = 240;
   static const uint16_t SCREEN_HEIGHT = 135;
   static const uint8_t CHAR_WIDTH = 6;
@@ -32,9 +33,10 @@ public:
 
   bool begin() {
     _isOn = true;
+    _bg_color = TFT_BLACK;
     M5.Display.setRotation(1);
-    M5.Display.fillScreen(TFT_BLACK);
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+    M5.Display.fillScreen(_bg_color);
+    M5.Display.setTextColor(TFT_WHITE, _bg_color);
     M5.Display.setTextSize(1);
     return true;
   }
@@ -44,6 +46,7 @@ public:
   void turnOn() override {
     if (!_isOn) {
       M5.Display.wakeup();
+      M5.Display.setTextColor(_color, _bg_color);
       _isOn = true;
     }
   }
@@ -57,7 +60,7 @@ public:
 
   void clear() override {
     if (!_isOn) return;
-    M5.Display.fillScreen(TFT_BLACK);
+    M5.Display.fillScreen(_bg_color);
     cursor_x = 0;
     cursor_y = 0;
   }
@@ -65,19 +68,19 @@ public:
   void startFrame(Color bkg = DARK) override {
     if (!_isOn) return;
 
-    uint16_t bgColor;
     switch (bkg) {
-      case DARK:   bgColor = _dark_color; break;
-      case LIGHT:  bgColor = _light_color; break;
-      case RED:    bgColor = TFT_RED; break;
-      case GREEN:  bgColor = TFT_GREEN; break;
-      case BLUE:   bgColor = TFT_BLUE; break;
-      case YELLOW: bgColor = TFT_YELLOW; break;
-      case ORANGE: bgColor = TFT_ORANGE; break;
-      default:     bgColor = _dark_color; break;
+      case DARK:   _bg_color = _dark_color; break;
+      case LIGHT:  _bg_color = _light_color; break;
+      case RED:    _bg_color = TFT_RED; break;
+      case GREEN:  _bg_color = TFT_GREEN; break;
+      case BLUE:   _bg_color = TFT_BLUE; break;
+      case YELLOW: _bg_color = TFT_YELLOW; break;
+      case ORANGE: _bg_color = TFT_ORANGE; break;
+      default:     _bg_color = _dark_color; break;
     }
 
-    M5.Display.fillScreen(bgColor);
+    M5.Display.fillScreen(_bg_color);
+    M5.Display.setTextColor(_color, _bg_color);
     cursor_x = 0;
     cursor_y = 0;
   }
@@ -98,7 +101,7 @@ public:
       case ORANGE: _color = TFT_ORANGE; break;
       default:     _color = _light_color; break;
     }
-    M5.Display.setTextColor(_color, _dark_color);
+    M5.Display.setTextColor(_color, _bg_color);
   }
 
   void setCursor(int x, int y) override {
