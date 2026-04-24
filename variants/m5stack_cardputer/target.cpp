@@ -22,7 +22,7 @@ bool CardputerSensorManager::begin() {
 }
 
 bool CardputerSensorManager::querySensors(uint8_t requester_permissions, CayenneLPP& telemetry) {
-  if (requester_permissions & TELEM_PERM_LOCATION) {
+  if ((requester_permissions & TELEM_PERM_LOCATION) && gps_active) {
     telemetry.addGPS(TELEM_CHANNEL_SELF, node_lat, node_lon, node_altitude);
   }
   return true;
@@ -78,6 +78,7 @@ bool CardputerSensorManager::setSettingValue(const char* name, const char* value
       Serial1.setPins(PIN_GPS_TX, PIN_GPS_RX);
       Serial1.begin(GPS_BAUD_RATE);
       _location->begin();
+      _location->reset();
       _location->syncTime();
       gps_active = true;
     } else if (!should_enable && gps_active) {
