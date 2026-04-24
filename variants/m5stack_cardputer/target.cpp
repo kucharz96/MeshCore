@@ -167,6 +167,10 @@ bool radio_init() {
   delay(100);
 
   bool init_result = radio.std_init(&spi);
+  if (init_result) {
+    int16_t pa_result = radio.setPaConfig(0x04, 0x07, 0x00, 0x01);
+    Serial.printf("[LoRa] PA config result: %d\n", pa_result);
+  }
   return init_result;
 }
 
