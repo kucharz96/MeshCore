@@ -16,6 +16,37 @@ AutoDiscoverRTCClock rtc_clock(fallback_clock);
 static MicroNMEALocationProvider location_provider(Serial1, &rtc_clock);
 CardputerSensorManager sensors(location_provider);
 
+static uint32_t startGpsUartWithFallback() {
+  const uint32_t candidates[] = { GPS_BAUD_RATE, 9600UL, 38400UL };
+  const size_t candidate_count = sizeof(candidates) / sizeof(candidates[0]);
+
+  for (size_t i = 0; i < candidate_count; ++i) {
+    uint32_t baud = candidates[i];
+    bool seen = false;
+    for (size_t j = 0; j < i; ++j) {
+      if (candidates[j] == baud) {
+        seen = true;
+        break;
+      }
+    }
+    if (seen) continue;
+
+    Serial.printf("[GPS] Trying UART baud %lu on RX=%d TX=%d\n", (unsigned long)baud, PIN_GPS_RX, PIN_GPS_TX);
+    Serial1.end();
+    delay(50);
+    Serial1.begin(baud, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
+    delay(1200);
+
+    int available = Serial1.available();
+    Serial.printf("[GPS] Bytes available after %lu baud start: %d\n", (unsigned long)baud, available);
+    if (available > 0) {
+      return baud;
+    }
+  }
+
+  return 0;
+}
+
 bool CardputerSensorManager::begin() {
   gps_active = false;
   return true;
@@ -38,10 +69,15 @@ void CardputerSensorManager::loop() {
   _location->loop();
 
   if (millis() > next_gps_update) {
-    if (_location->isValid()) {
+    bool valid = _location->isValid();
+    long sats = _location->satellitesCount();
+    Serial.printf("[GPS] valid=%d sats=%ld\n", valid ? 1 : 0, sats);
+
+    if (valid) {
       node_lat = ((double)_location->getLatitude()) / 1000000.;
       node_lon = ((double)_location->getLongitude()) / 1000000.;
       node_altitude = ((double)_location->getAltitude()) / 1000.0;
+      Serial.printf("[GPS] fix lat=%.6f lon=%.6f alt=%.1f\n", node_lat, node_lon, node_altitude);
     }
     next_gps_update = millis() + (gps_interval_secs * 1000UL);
   }
@@ -74,8 +110,17 @@ const char* CardputerSensorManager::getSettingValue(int i) const {
 bool CardputerSensorManager::setSettingValue(const char* name, const char* value) {
   if (strcmp(name, "gps") == 0) {
     bool should_enable = (strcmp(value, "0") != 0);
+    Serial.printf("[GPS] Request to turn %s\n", should_enable ? "ON" : "OFF");
+
     if (should_enable && !gps_active) {
-      Serial1.begin(GPS_BAUD_RATE, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
+      uint32_t actual_baud = startGpsUartWithFallback();
+      if (actual_baud == 0) {
+        Serial.println("[GPS] WARNING: no UART data seen on any tested baud");
+        Serial1.begin(GPS_BAUD_RATE, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
+      } else {
+        Serial.printf("[GPS] Using detected baud %lu\n", (unsigned long)actual_baud);
+      }
+
       _location->begin();
       _location->reset();
       _location->syncTime();
@@ -84,6 +129,7 @@ bool CardputerSensorManager::setSettingValue(const char* name, const char* value
       _location->stop();
       Serial1.end();
       gps_active = false;
+      Serial.println("[GPS] Turned OFF");
     }
     return true;
   }
@@ -91,6 +137,7 @@ bool CardputerSensorManager::setSettingValue(const char* name, const char* value
   if (strcmp(name, "gps_interval") == 0) {
     unsigned long parsed = strtoul(value, NULL, 10);
     gps_interval_secs = parsed > 0 ? parsed : 180;
+    Serial.printf("[GPS] Interval set to %lu seconds\n", (unsigned long)gps_interval_secs);
     return true;
   }
 
