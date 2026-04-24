@@ -14,10 +14,6 @@
 class M5CardputerBoard : public ESP32Board {
 public:
   void begin() {
-    pinMode(46, OUTPUT);
-    digitalWrite(46, HIGH);
-    delay(100);
-
     ESP32Board::begin();
 
     auto cfg = M5.config();
@@ -30,9 +26,11 @@ public:
     delay(100);
     M5Cardputer.Keyboard.begin();
 
-    M5.In_I2C.writeRegister8(0x43, 0x03, 0x00, 100000);
+    // Cardputer ADV LoRa Cap RF switch supply is controlled by the PI4IOE expander.
+    // Only expander pin 0 should be driven high here; SX1262 DIO2 handles TX/RX RF switching.
+    M5.In_I2C.writeRegister8(0x43, 0x03, 0xFE, 100000);
     delay(10);
-    M5.In_I2C.writeRegister8(0x43, 0x01, 0xFF, 100000);
+    M5.In_I2C.writeRegister8(0x43, 0x01, 0x01, 100000);
     delay(200);
 
     esp_reset_reason_t reason = esp_reset_reason();
