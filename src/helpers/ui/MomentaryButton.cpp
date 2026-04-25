@@ -26,12 +26,12 @@ static int cardputerKeyboardNavEvent() {
 
   auto& keys = M5Cardputer.Keyboard.keysState();
 
-  // Cardputer has no dedicated arrow keys, so use the side-by-side keys as navigation:
-  //   left:  ',' / '<'  or A
-  //   right: '.' / '>'  or D
+  // Cardputer uses the punctuation keys with arrow legends for navigation:
+  //   left:  ',' / '<'
+  //   right: '/' / '?'  ('.' / '>' is also accepted on layouts that mark it as right)
   //   enter: physical Enter
-  bool left = cardputerWordHas(keys, ',', '<', 'a', 'A');
-  bool right = cardputerWordHas(keys, '.', '>', 'd', 'D');
+  bool left = cardputerWordHas(keys, ',', '<');
+  bool right = cardputerWordHas(keys, '/', '?', '.', '>');
   bool enter = keys.enter;
   bool any = left || right || enter;
 
