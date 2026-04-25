@@ -22,10 +22,31 @@
 #define CARDPUTER_RF_TX_SAMPLE_MS 18UL
 #endif
 
+#ifndef CARDPUTER_RF_RX_CAPTURE_GUARD_MS
+#define CARDPUTER_RF_RX_CAPTURE_GUARD_MS 550UL
+#endif
+
+#ifndef CARDPUTER_RF_RX_WATCHDOG_SILENCE_MS
+#define CARDPUTER_RF_RX_WATCHDOG_SILENCE_MS 180000UL
+#endif
+
+#ifndef CARDPUTER_RF_RX_WATCHDOG_INTERVAL_MS
+#define CARDPUTER_RF_RX_WATCHDOG_INTERVAL_MS 60000UL
+#endif
+
 class CardputerRfStabilityWrapper : public CustomSX1262Wrapper {
   uint32_t _last_rx_boost_check_ms = 0;
+  uint32_t _last_rx_packet_ms = 0;
+  uint32_t _last_rx_watchdog_ms = 0;
   uint16_t _last_tx_wait_ms = 0;
+  uint16_t _last_rx_guard_wait_ms = 0;
   uint32_t _tx_window_count = 0;
+  uint32_t _rx_guard_count = 0;
+  uint32_t _rx_watchdog_count = 0;
+
+  static uint16_t clamp16(uint32_t value) {
+    return value > 65535UL ? 65535 : (uint16_t)value;
+  }
 
   void keepRxBoostedGain() {
 #if defined(SX126X_RX_BOOSTED_GAIN) && SX126X_RX_BOOSTED_GAIN
@@ -49,6 +70,47 @@ class CardputerRfStabilityWrapper : public CustomSX1262Wrapper {
     return ((int)getCurrentRSSI()) > txBusyRssiThreshold();
   }
 
+  uint8_t payloadTypeFromRaw(const uint8_t* bytes, int len) const {
+    if (bytes == nullptr || len <= 0) {
+      return 0xFF;
+    }
+    return (bytes[0] >> PH_TYPE_SHIFT) & PH_TYPE_MASK;
+  }
+
+  bool shouldSkipRxCaptureGuard(uint8_t payload_type) const {
+    // Do not delay return traffic. ACK/PATH/RESPONSE are exactly the frames
+    // that need to go out quickly after a receive event.
+    return payload_type == PAYLOAD_TYPE_ACK ||
+           payload_type == PAYLOAD_TYPE_PATH ||
+           payload_type == PAYLOAD_TYPE_RESPONSE;
+  }
+
+  void waitAfterFreshRxIfUseful(uint8_t payload_type) {
+    _last_rx_guard_wait_ms = 0;
+    if (_last_rx_packet_ms == 0 || shouldSkipRxCaptureGuard(payload_type)) {
+      return;
+    }
+
+    uint32_t now = millis();
+    uint32_t age = now - _last_rx_packet_ms;
+    if (age >= CARDPUTER_RF_RX_CAPTURE_GUARD_MS) {
+      return;
+    }
+
+    uint32_t wait_ms = CARDPUTER_RF_RX_CAPTURE_GUARD_MS - age;
+    uint32_t started = now;
+
+    while ((uint32_t)(millis() - started) < wait_ms) {
+      delay(CARDPUTER_RF_TX_SAMPLE_MS);
+      yield();
+    }
+
+    _last_rx_guard_wait_ms = clamp16(millis() - started);
+    if (_last_rx_guard_wait_ms > 0) {
+      _rx_guard_count++;
+    }
+  }
+
   void waitForTxWindow() {
     const uint32_t started = millis();
     uint32_t quiet_since = 0;
@@ -70,10 +132,28 @@ class CardputerRfStabilityWrapper : public CustomSX1262Wrapper {
       yield();
     }
 
-    _last_tx_wait_ms = (uint16_t)min<uint32_t>(millis() - started, 65535UL);
+    _last_tx_wait_ms = clamp16(millis() - started);
     if (_last_tx_wait_ms > 0) {
       _tx_window_count++;
     }
+  }
+
+  void runRxWatchdogIfSilent(uint32_t now) {
+    if (_last_rx_packet_ms != 0 && (uint32_t)(now - _last_rx_packet_ms) < CARDPUTER_RF_RX_WATCHDOG_SILENCE_MS) {
+      return;
+    }
+    if ((uint32_t)(now - _last_rx_watchdog_ms) < CARDPUTER_RF_RX_WATCHDOG_INTERVAL_MS) {
+      return;
+    }
+    if (isReceivingPacket()) {
+      return;
+    }
+
+    _last_rx_watchdog_ms = now;
+    keepRxBoostedGain();
+    resetAGC();
+    keepRxBoostedGain();
+    _rx_watchdog_count++;
   }
 
 public:
@@ -81,7 +161,9 @@ public:
     : CustomSX1262Wrapper(radio, board) { }
 
   bool startSendRaw(const uint8_t* bytes, int len) override {
+    uint8_t payload_type = payloadTypeFromRaw(bytes, len);
     keepRxBoostedGain();
+    waitAfterFreshRxIfUseful(payload_type);
     waitForTxWindow();
     keepRxBoostedGain();
     return RadioLibWrapper::startSendRaw(bytes, len);
@@ -95,6 +177,7 @@ public:
   int recvRaw(uint8_t* bytes, int sz) override {
     int len = RadioLibWrapper::recvRaw(bytes, sz);
     if (len > 0) {
+      _last_rx_packet_ms = millis();
       keepRxBoostedGain();
     }
     return len;
@@ -107,8 +190,13 @@ public:
       _last_rx_boost_check_ms = now;
       keepRxBoostedGain();
     }
+    runRxWatchdogIfSilent(now);
   }
 
   uint16_t getLastTxWaitMillis() const { return _last_tx_wait_ms; }
   uint32_t getTxWindowCount() const { return _tx_window_count; }
+  uint16_t getLastRxGuardWaitMillis() const { return _last_rx_guard_wait_ms; }
+  uint32_t getRxGuardCount() const { return _rx_guard_count; }
+  uint32_t getRxWatchdogCount() const { return _rx_watchdog_count; }
+  uint32_t getLastRxAgeMillis() const { return _last_rx_packet_ms == 0 ? 0xFFFFFFFFUL : millis() - _last_rx_packet_ms; }
 };
