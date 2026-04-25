@@ -13,6 +13,11 @@
 #define TFT_ORANGE 0xFD20
 #endif
 
+#ifdef CARDPUTER_RF_DIAG_OVERLAY
+class M5CardputerDisplay;
+void cardputerDrawRfOverlay(M5CardputerDisplay& disp);
+#endif
+
 class M5CardputerDisplay : public DisplayDriver {
 private:
   bool _isOn = false;
@@ -144,6 +149,9 @@ public:
 
   void endFrame() override {
     if (!_isOn) return;
+#ifdef CARDPUTER_RF_DIAG_OVERLAY
+    cardputerDrawRfOverlay(*this);
+#endif
   }
 };
 
