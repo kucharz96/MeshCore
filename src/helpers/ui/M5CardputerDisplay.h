@@ -149,9 +149,6 @@ public:
 
   void endFrame() override {
     if (!_isOn) return;
-#ifdef CARDPUTER_RF_DIAG_OVERLAY
-    cardputerDrawRfOverlay(*this);
-#endif
   }
 };
 
