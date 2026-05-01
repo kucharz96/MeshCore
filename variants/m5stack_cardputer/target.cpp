@@ -6,7 +6,8 @@
 M5CardputerBoard board;
 
 static SPIClass spi;
-RADIO_CLASS radio = new Module(P_LORA_NSS, P_LORA_DIO_1, P_LORA_RESET, P_LORA_BUSY, spi, SPISettings());
+static SPISettings lora_spi_settings(4000000, MSBFIRST, SPI_MODE0);
+RADIO_CLASS radio = new Module(P_LORA_NSS, P_LORA_DIO_1, P_LORA_RESET, P_LORA_BUSY, spi, lora_spi_settings);
 WRAPPER_CLASS radio_driver(radio, board);
 
 ESP32RTCClock fallback_clock;
@@ -102,8 +103,7 @@ const char* CardputerSensorManager::getSettingValue(int i) const {
     case 1:
       snprintf(_gps_interval_buf, sizeof(_gps_interval_buf), "%lu", (unsigned long)gps_interval_secs);
       return _gps_interval_buf;
-    default:
-      return NULL;
+    default: return NULL;
   }
 }
 
@@ -156,20 +156,34 @@ MomentaryButton user_btn(PIN_USER_BTN, 1000, true);
   #define LORA_CR 5
 #endif
 
+static void applyRadioRuntimeBaseline() {
+#ifdef SX126X_CURRENT_LIMIT
+  radio.setCurrentLimit(SX126X_CURRENT_LIMIT);
+#endif
+#ifdef SX126X_DIO2_AS_RF_SWITCH
+  radio.setDio2AsRfSwitch(SX126X_DIO2_AS_RF_SWITCH);
+#endif
+  radio.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+#ifdef SX126X_RX_BOOSTED_GAIN
+  radio.setRxBoostedGainMode(SX126X_RX_BOOSTED_GAIN);
+#endif
+#ifdef SX126X_REGISTER_PATCH
+  uint8_t r_data = 0;
+  if (radio.readRegister(0x8B5, &r_data, 1) == RADIOLIB_ERR_NONE) {
+    r_data |= 0x01;
+    radio.writeRegister(0x8B5, &r_data, 1);
+  }
+#endif
+  radio.setCRC(1);
+}
+
 bool radio_init() {
   fallback_clock.begin();
   rtc_clock.begin(Wire);
 
-  pinMode(P_LORA_RESET, OUTPUT);
-  digitalWrite(P_LORA_RESET, LOW);
-  delay(10);
-  digitalWrite(P_LORA_RESET, HIGH);
-  delay(100);
-
   bool init_result = radio.std_init(&spi);
   if (init_result) {
-    int16_t pa_result = radio.setPaConfig(0x04, 0x07, 0x00, 0x01);
-    Serial.printf("[LoRa] PA config result: %d\n", pa_result);
+    applyRadioRuntimeBaseline();
   }
   return init_result;
 }
@@ -179,10 +193,14 @@ uint32_t radio_get_rng_seed() {
 }
 
 void radio_set_params(float freq, float bw, uint8_t sf, uint8_t cr) {
-  radio.setFrequency(freq);
+  radio.standby();
   radio.setSpreadingFactor(sf);
   radio.setBandwidth(bw);
   radio.setCodingRate(cr);
+  radio.setFrequency(freq);
+  radio.setOutputPower(LORA_TX_POWER);
+  applyRadioRuntimeBaseline();
+  radio.startReceive();
 }
 
 void radio_set_tx_power(uint8_t dbm) {
