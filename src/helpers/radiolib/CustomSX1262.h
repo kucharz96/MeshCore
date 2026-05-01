@@ -18,7 +18,7 @@ class CustomSX1262 : public SX1262 {
   #ifdef SX126X_DIO3_TCXO_VOLTAGE
       float tcxo = SX126X_DIO3_TCXO_VOLTAGE;
   #else
-      float tcxo = 0.0f;
+      float tcxo = 1.6f;
   #endif
 
   #ifdef LORA_CR
@@ -43,23 +43,11 @@ class CustomSX1262 : public SX1262 {
     #endif
   #endif
       int status = begin(LORA_FREQ, LORA_BW, LORA_SF, cr, RADIOLIB_SX126X_SYNC_WORD_PRIVATE, LORA_TX_POWER, 16, tcxo);
-
-  #if defined(TCXO_OPTIONAL) && defined(SX126X_DIO3_TCXO_VOLTAGE)
-      if (status != RADIOLIB_ERR_NONE) {
-        Serial.print("WARN: SX1262 init with TCXO failed: ");
-        Serial.print(status);
-        Serial.println(", retrying with XTAL / Vref 0.0V");
-        tcxo = 0.0f;
-        status = begin(LORA_FREQ, LORA_BW, LORA_SF, cr, RADIOLIB_SX126X_SYNC_WORD_PRIVATE, LORA_TX_POWER, 16, tcxo);
-      }
-  #else
       // if radio init fails with -707/-706, try again with tcxo voltage set to 0.0f
       if (status == RADIOLIB_ERR_SPI_CMD_FAILED || status == RADIOLIB_ERR_SPI_CMD_INVALID) {
         tcxo = 0.0f;
         status = begin(LORA_FREQ, LORA_BW, LORA_SF, cr, RADIOLIB_SX126X_SYNC_WORD_PRIVATE, LORA_TX_POWER, 16, tcxo);
       }
-  #endif
-
       if (status != RADIOLIB_ERR_NONE) {
         Serial.print("ERROR: radio init failed: ");
         Serial.println(status);
@@ -77,15 +65,17 @@ class CustomSX1262 : public SX1262 {
   #ifdef SX126X_RX_BOOSTED_GAIN
       setRxBoostedGainMode(SX126X_RX_BOOSTED_GAIN);
   #endif
-  #ifndef SX126X_RXEN
+  #if defined(SX126X_RXEN) || defined(SX126X_TXEN)
+    #ifndef SX126X_RXEN
       #define SX126X_RXEN RADIOLIB_NC
-  #endif
-  #ifndef SX126X_TXEN
+    #endif
+    #ifndef SX126X_TXEN
       #define SX126X_TXEN RADIOLIB_NC
-  #endif
+    #endif
       setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+  #endif 
 
-  // for improved RX with Heltec v4 / SX1262 boards
+  // for improved RX with Heltec v4
   #ifdef SX126X_REGISTER_PATCH
     uint8_t r_data = 0;
     readRegister(0x8B5, &r_data, 1);
