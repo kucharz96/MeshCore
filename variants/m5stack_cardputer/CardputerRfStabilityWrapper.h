@@ -7,7 +7,7 @@
 #endif
 
 #ifndef CARDPUTER_RF_RX_WATCHDOG_SILENCE_MS
-#define CARDPUTER_RF_RX_WATCHDOG_SILENCE_MS 180000UL
+#define CARDPUTER_RF_RX_WATCHDOG_SILENCE_MS 60000UL
 #endif
 
 #ifndef CARDPUTER_RF_RX_WATCHDOG_INTERVAL_MS
@@ -51,8 +51,6 @@ public:
     : CustomSX1262Wrapper(radio, board) { }
 
   bool startSendRaw(const uint8_t* bytes, int len) override {
-    // Keep the RX gain protection, but do not add custom TX delays here.
-    // The MeshCore dispatcher already handles channel activity and retry timing.
     keepRxBoostedGain();
     return RadioLibWrapper::startSendRaw(bytes, len);
   }
