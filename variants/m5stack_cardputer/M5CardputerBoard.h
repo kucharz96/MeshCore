@@ -24,14 +24,12 @@ public:
     cfg.internal_mic = false;
     M5Cardputer.begin(cfg, true);
     delay(100);
-    M5Cardputer.Keyboard.begin();
 
-    // Cardputer ADV LoRa Cap RF switch supply is controlled by the PI4IOE expander.
-    // Only expander pin 0 should be driven high here; SX1262 DIO2 handles TX/RX RF switching.
-    M5.In_I2C.writeRegister8(0x43, 0x03, 0xFE, 100000);
-    delay(10);
-    M5.In_I2C.writeRegister8(0x43, 0x01, 0x01, 100000);
-    delay(200);
+    Serial.printf("[M5] Board ID: %d\n", (int)M5.getBoard());
+
+    // Keep the Cardputer ADV LoRa path aligned with the Meshtastic reference:
+    // Cap LoRa-1262 uses SX1262 DIO2 RF switch control. There is no default
+    // PI4IOE/0x43 LoRa RF-path enable in the Meshtastic Cardputer ADV variant.
 
     esp_reset_reason_t reason = esp_reset_reason();
     if (reason == ESP_RST_DEEPSLEEP) {
