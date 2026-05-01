@@ -16,6 +16,24 @@
   #include <helpers/ui/MomentaryButton.h>
 #endif
 
+#undef LORA_SCK
+#undef LORA_MISO
+#undef LORA_MOSI
+#undef LORA_CS
+
+#define LORA_SCK P_LORA_SCLK
+#define LORA_MISO P_LORA_MISO
+#define LORA_MOSI P_LORA_MOSI
+#define LORA_CS P_LORA_NSS
+
+#ifndef SX126X_RXEN
+#define SX126X_RXEN RADIOLIB_NC
+#endif
+
+#ifndef SX126X_TXEN
+#define SX126X_TXEN RADIOLIB_NC
+#endif
+
 #ifdef HAS_GPS
 class CardputerSensorManager : public SensorManager {
   bool gps_active = false;
