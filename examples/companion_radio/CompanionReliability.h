@@ -27,6 +27,14 @@ public:
     SendModeFloodDiscovery = 3
   };
 
+  enum Health : uint8_t {
+    HealthUnknown = 0,
+    HealthGood = 1,
+    HealthWeak = 2,
+    HealthBad = 3,
+    HealthCircuitOpen = 4
+  };
+
   struct Stats {
     uint8_t pubkey_prefix[6];
 
@@ -46,6 +54,13 @@ public:
     uint32_t last_fail_ms;
     uint32_t last_flood_discovery_ms;
     uint32_t last_score_update_ms;
+  };
+
+  struct Snapshot {
+    Stats stats;
+    uint8_t out_path_len;
+    Health health;
+    SendMode recommended_mode;
   };
 
   static const uint8_t DEFAULT_SCORE = 70;
@@ -191,6 +206,63 @@ public:
     return s ? s->fail_streak : 0;
   }
 
+  Health getHealth(const uint8_t pubkey_prefix[6], uint8_t out_path_len, uint32_t now_ms = 0) {
+    const Stats* existing = findConst(pubkey_prefix);
+    if (!existing) return out_path_len == 0xFF ? HealthUnknown : HealthWeak;
+
+    Stats local = *existing;
+    recomputeScore(local, out_path_len, now_ms);
+    if (local.fail_streak >= CIRCUIT_BREAKER_FAILS) return HealthCircuitOpen;
+    if (local.score >= DIRECT_SCORE_THRESHOLD) return HealthGood;
+    if (local.score >= CAUTIOUS_SCORE_THRESHOLD) return HealthWeak;
+    return HealthBad;
+  }
+
+  bool getSnapshot(const uint8_t pubkey_prefix[6], uint8_t out_path_len, uint32_t now_ms, Snapshot& dest) {
+    const Stats* existing = findConst(pubkey_prefix);
+    if (!existing) return false;
+
+    dest.stats = *existing;
+    dest.out_path_len = out_path_len;
+    recomputeScore(dest.stats, out_path_len, now_ms);
+    dest.health = healthFromStats(dest.stats);
+    dest.recommended_mode = chooseSendMode(pubkey_prefix, out_path_len, now_ms);
+    return true;
+  }
+
+  uint8_t getEntryCount() const {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < MAX_ENTRIES; i++) {
+      if (isUsed(_entries[i])) count++;
+    }
+    return count;
+  }
+
+  uint16_t getTotalSends() const {
+    return _total_sends;
+  }
+
+  static const char* sendModeName(SendMode mode) {
+    switch (mode) {
+      case SendModeFlood: return "flood";
+      case SendModeDirect: return "direct";
+      case SendModeDirectCautious: return "direct_cautious";
+      case SendModeFloodDiscovery: return "flood_discovery";
+      default: return "unknown";
+    }
+  }
+
+  static const char* healthName(Health health) {
+    switch (health) {
+      case HealthGood: return "good";
+      case HealthWeak: return "weak";
+      case HealthBad: return "bad";
+      case HealthCircuitOpen: return "circuit_open";
+      case HealthUnknown:
+      default: return "unknown";
+    }
+  }
+
 private:
   static const uint8_t MAX_ENTRIES = 32;
 
@@ -227,6 +299,13 @@ private:
 
     _next_evict = (idx + 1) % MAX_ENTRIES;
     return idx;
+  }
+
+  static Health healthFromStats(const Stats& s) {
+    if (s.fail_streak >= CIRCUIT_BREAKER_FAILS) return HealthCircuitOpen;
+    if (s.score >= DIRECT_SCORE_THRESHOLD) return HealthGood;
+    if (s.score >= CAUTIOUS_SCORE_THRESHOLD) return HealthWeak;
+    return HealthBad;
   }
 
   void recomputeScore(Stats& s, uint8_t out_path_len, uint32_t now_ms) {
