@@ -43,6 +43,7 @@ public:
     uint8_t delivery_ewma;       // 0..100 ACK-derived delivery probability
     uint8_t fail_streak;         // consecutive timeout/retry observations
     uint8_t selected_direct_streak;
+    uint8_t last_send_mode;
 
     uint16_t direct_sent;
     uint16_t flood_sent;
@@ -125,6 +126,7 @@ public:
     memcpy(s.pubkey_prefix, pubkey_prefix, 6);
     s.score = DEFAULT_SCORE;
     s.delivery_ewma = DEFAULT_DELIVERY_EWMA;
+    s.last_send_mode = SendModeFlood;
     return &s;
   }
 
@@ -140,27 +142,14 @@ public:
 
     recomputeScore(*s, out_path_len, now_ms);
 
-    if (s->fail_streak >= CIRCUIT_BREAKER_FAILS) {
-      return canFloodDiscover(*s, now_ms) ? SendModeFloodDiscovery : SendModeDirectCautious;
-    }
-
-    if (s->score >= DIRECT_SCORE_THRESHOLD) {
+    SendMode mode = recommendModeFromStats(*s, out_path_len, now_ms);
+    if (mode == SendModeDirect || mode == SendModeDirectCautious) {
       s->selected_direct_streak = addSat8(s->selected_direct_streak, 1);
-      return SendModeDirect;
-    }
-
-    if (s->score >= CAUTIOUS_SCORE_THRESHOLD) {
-      s->selected_direct_streak = addSat8(s->selected_direct_streak, 1);
-      return SendModeDirectCautious;
-    }
-
-    if (s->score <= FLOOD_DISCOVERY_SCORE_THRESHOLD && canFloodDiscover(*s, now_ms)) {
+    } else if (mode == SendModeFloodDiscovery) {
       s->selected_direct_streak = 0;
       s->last_flood_discovery_ms = now_ms;
-      return SendModeFloodDiscovery;
     }
-
-    return SendModeDirectCautious;
+    return mode;
   }
 
   void recordSend(const uint8_t pubkey_prefix[6], SendMode mode, uint32_t now_ms) {
@@ -169,6 +158,7 @@ public:
 
     incrementSat(_total_sends);
     s->last_send_ms = now_ms;
+    s->last_send_mode = mode;
     if (mode == SendModeDirect || mode == SendModeDirectCautious) {
       incrementSat(s->direct_sent);
     } else {
@@ -256,7 +246,7 @@ public:
     dest.out_path_len = out_path_len;
     recomputeScore(dest.stats, out_path_len, now_ms);
     dest.health = healthFromStats(dest.stats);
-    dest.recommended_mode = chooseSendMode(pubkey_prefix, out_path_len, now_ms);
+    dest.recommended_mode = recommendModeFromStats(dest.stats, out_path_len, now_ms);
     return true;
   }
 
@@ -338,6 +328,17 @@ private:
     if (s.score >= DIRECT_SCORE_THRESHOLD) return HealthGood;
     if (s.score >= CAUTIOUS_SCORE_THRESHOLD) return HealthWeak;
     return HealthBad;
+  }
+
+  static SendMode recommendModeFromStats(const Stats& s, uint8_t out_path_len, uint32_t now_ms) {
+    if (out_path_len == 0xFF) return SendModeFlood;
+    if (s.fail_streak >= CIRCUIT_BREAKER_FAILS) {
+      return canFloodDiscover(s, now_ms) ? SendModeFloodDiscovery : SendModeDirectCautious;
+    }
+    if (s.score >= DIRECT_SCORE_THRESHOLD) return SendModeDirect;
+    if (s.score >= CAUTIOUS_SCORE_THRESHOLD) return SendModeDirectCautious;
+    if (s.score <= FLOOD_DISCOVERY_SCORE_THRESHOLD && canFloodDiscover(s, now_ms)) return SendModeFloodDiscovery;
+    return SendModeDirectCautious;
   }
 
   void recomputeScore(Stats& s, uint8_t out_path_len, uint32_t now_ms) {
