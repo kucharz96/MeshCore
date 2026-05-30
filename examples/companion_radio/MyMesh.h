@@ -103,6 +103,40 @@ public:
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
 
+  int sendMessage(const ContactInfo& recipient, uint32_t timestamp, uint8_t attempt, const char* text,
+                  uint32_t& expected_ack, uint32_t& est_timeout) {
+    ContactInfo routed = recipient;
+    CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len);
+    if (mode == CompanionReliability::SendModeFloodDiscovery) {
+      routed.out_path_len = OUT_PATH_UNKNOWN;
+    }
+
+    int result = BaseChatMesh::sendMessage(routed, timestamp, attempt, text, expected_ack, est_timeout);
+    if (result != MSG_SEND_FAILED) {
+      CompanionReliability::SendMode recorded_mode =
+          (result == MSG_SEND_SENT_DIRECT) ? CompanionReliability::SendModeDirect : CompanionReliability::SendModeFlood;
+      reliability.recordSend(recipient.id.pub_key, recorded_mode, _ms->getMillis());
+    }
+    return result;
+  }
+
+  int sendCommandData(const ContactInfo& recipient, uint32_t timestamp, uint8_t attempt, const char* text,
+                      uint32_t& est_timeout) {
+    ContactInfo routed = recipient;
+    CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len);
+    if (mode == CompanionReliability::SendModeFloodDiscovery) {
+      routed.out_path_len = OUT_PATH_UNKNOWN;
+    }
+
+    int result = BaseChatMesh::sendCommandData(routed, timestamp, attempt, text, est_timeout);
+    if (result != MSG_SEND_FAILED) {
+      CompanionReliability::SendMode recorded_mode =
+          (result == MSG_SEND_SENT_DIRECT) ? CompanionReliability::SendModeDirect : CompanionReliability::SendModeFlood;
+      reliability.recordSend(recipient.id.pub_key, recorded_mode, _ms->getMillis());
+    }
+    return result;
+  }
+
 protected:
   float getAirtimeBudgetFactor() const override;
   int getInterferenceThreshold() const override;
