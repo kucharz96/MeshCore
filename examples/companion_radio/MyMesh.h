@@ -187,7 +187,34 @@ protected:
   bool onContactPathRecv(ContactInfo& from, uint8_t* in_path, uint8_t in_path_len, uint8_t* out_path, uint8_t out_path_len, uint8_t extra_type, uint8_t* extra, uint8_t extra_len) override;
   void onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) override;
   void onContactPathUpdated(const ContactInfo &contact) override;
-  ContactInfo* processAck(const uint8_t *data) override;
+
+  ContactInfo* processAckImpl(const uint8_t *data);
+  ContactInfo* processAck(const uint8_t *data) override {
+    uint8_t matched_prefix[6];
+    uint32_t sent_at = 0;
+    bool matched_expected_ack = false;
+
+    for (int i = 0; i < EXPECTED_ACK_TABLE_SIZE; i++) {
+      if (expected_ack_table[i].ack != 0 && memcmp(data, &expected_ack_table[i].ack, 4) == 0) {
+        matched_expected_ack = expected_ack_table[i].contact != NULL;
+        sent_at = expected_ack_table[i].msg_sent;
+        if (matched_expected_ack) {
+          memcpy(matched_prefix, expected_ack_table[i].contact->id.pub_key, sizeof(matched_prefix));
+        }
+        break;
+      }
+    }
+
+    ContactInfo* contact = processAckImpl(data);
+    uint32_t now = _ms->getMillis();
+    if (matched_expected_ack) {
+      reliability.recordAck(matched_prefix, sent_at ? now - sent_at : 0, now);
+    } else if (contact) {
+      reliability.recordAck(contact->id.pub_key, 0, now);
+    }
+    return contact;
+  }
+
   void queueMessage(const ContactInfo &from, uint8_t txt_type, mesh::Packet *pkt, uint32_t sender_timestamp,
                     const uint8_t *extra, int extra_len, const char *text);
 
@@ -212,7 +239,17 @@ protected:
 
   uint32_t calcFloodTimeoutMillisFor(uint32_t pkt_airtime_millis) const override;
   uint32_t calcDirectTimeoutMillisFor(uint32_t pkt_airtime_millis, uint8_t path_len) const override;
-  void onSendTimeout() override;
+
+  void onSendTimeoutImpl();
+  void onSendTimeout() override {
+    uint32_t now = _ms->getMillis();
+    for (int i = 0; i < EXPECTED_ACK_TABLE_SIZE; i++) {
+      if (expected_ack_table[i].ack != 0 && expected_ack_table[i].contact != NULL) {
+        reliability.recordTimeout(expected_ack_table[i].contact->id.pub_key, now);
+      }
+    }
+    onSendTimeoutImpl();
+  }
 
   // DataStoreHost methods
   bool onContactLoaded(const ContactInfo& contact) override { return addContact(contact); }
@@ -330,3 +367,9 @@ private:
 };
 
 extern MyMesh the_mesh;
+
+// Compatibility shim: MyMesh.cpp still contains the original out-of-class method
+// bodies. The macro remaps those bodies to *Impl so the inline overrides above
+// can add local reliability bookkeeping without changing the official protocol.
+#define processAck processAckImpl
+#define onSendTimeout onSendTimeoutImpl
