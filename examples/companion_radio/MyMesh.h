@@ -23,6 +23,7 @@
 #include <SPIFFS.h>
 #endif
 
+#include "CompanionReliability.h"
 #include "DataStore.h"
 #include "NodePrefs.h"
 
@@ -185,7 +186,7 @@ private:
   void updateContactFromFrame(ContactInfo &contact, uint32_t& last_mod, const uint8_t *frame, int len);
   void addToOfflineQueue(const uint8_t frame[], int len);
   int getFromOfflineQueue(uint8_t frame[]);
-  int getBlobByKey(const uint8_t key[], int key_len, uint8_t dest_buf[]) override { 
+  int getBlobByKey(const uint8_t key[], int key_len, uint8_t dest_buf[]) override {
     return _store->getBlobByKey(key, key_len, dest_buf);
   }
   bool putBlobByKey(const uint8_t key[], int key_len, const uint8_t src_buf[], int len) override {
@@ -222,6 +223,7 @@ private:
   unsigned long dirty_contacts_expiry;
 
   TransportKey send_scope;
+  CompanionReliability reliability;
 
   uint8_t cmd_frame[MAX_FRAME_SIZE + 1];
   uint8_t out_frame[MAX_FRAME_SIZE + 1];
@@ -240,6 +242,8 @@ private:
     unsigned long msg_sent;
     uint32_t ack;
     ContactInfo* contact;
+    CompanionReliability::SendMode send_mode;
+    uint8_t pubkey_prefix[6];
   };
   #define EXPECTED_ACK_TABLE_SIZE 8
   AckTableEntry expected_ack_table[EXPECTED_ACK_TABLE_SIZE]; // circular table
