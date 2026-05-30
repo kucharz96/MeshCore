@@ -240,10 +240,18 @@ private:
 
     // More path hashes mean more hops and larger packets. Penalise gently.
     uint8_t hop_count = out_path_len & 0x3F;
-    if (hop_count > 1) score = subSat8(score, min<uint8_t>(18, (hop_count - 1) * 3));
+    if (hop_count > 1) {
+      uint8_t hop_penalty = (hop_count - 1) * 3;
+      if (hop_penalty > 18) hop_penalty = 18;
+      score = subSat8(score, hop_penalty);
+    }
 
     // Circuit breaker penalty for consecutive failed attempts.
-    if (s.fail_streak > 0) score = subSat8(score, min<uint8_t>(45, s.fail_streak * 13));
+    if (s.fail_streak > 0) {
+      uint8_t fail_penalty = s.fail_streak * 13;
+      if (fail_penalty > 45) fail_penalty = 45;
+      score = subSat8(score, fail_penalty);
+    }
 
     // Age decay: stale paths should not be trusted forever.
     if (now_ms && s.last_success_ms) {
