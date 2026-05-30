@@ -16,6 +16,7 @@
  * - quickly stop trusting repeated failing direct paths
  * - avoid route flapping with hysteresis
  * - avoid excessive discovery/flooding with cooldowns
+ * - learn from passive received-link quality without increasing TX power
  * - keep the implementation lightweight for embedded targets
  */
 class CompanionReliability {
@@ -47,11 +48,16 @@ public:
     uint16_t flood_sent;
     uint16_t ack_ok;
     uint16_t ack_timeout;
+    uint16_t heard_count;
     uint16_t rtt_ewma_ms;
+
+    int8_t snr_ewma_x4;          // SNR * 4, as used by the companion protocol
+    int8_t rssi_ewma_dbm;        // coarse RSSI EWMA, signed dBm
 
     uint32_t last_send_ms;
     uint32_t last_success_ms;
     uint32_t last_fail_ms;
+    uint32_t last_heard_ms;
     uint32_t last_flood_discovery_ms;
     uint32_t last_score_update_ms;
   };
@@ -71,10 +77,12 @@ public:
   static const uint8_t CIRCUIT_BREAKER_FAILS = 3;
   static const uint8_t ACK_REWARD = 7;
   static const uint8_t TIMEOUT_PENALTY = 16;
+  static const uint8_t HEARD_REWARD = 2;
   static const uint8_t EWMA_ALPHA_PERCENT = 20;
 
   static const uint32_t STALE_PATH_MS = 30UL * 60UL * 1000UL;
   static const uint32_t VERY_STALE_PATH_MS = 2UL * 60UL * 60UL * 1000UL;
+  static const uint32_t STALE_HEARD_MS = 20UL * 60UL * 1000UL;
   static const uint32_t FLOOD_DISCOVERY_COOLDOWN_MS = 90UL * 1000UL;
 
   CompanionReliability() { clear(); }
@@ -194,6 +202,28 @@ public:
     s->score = subSat8(s->score, TIMEOUT_PENALTY);
   }
 
+  /**
+   * Passive link-quality learning. This improves range quality without raising TX power:
+   * a contact repeatedly heard with usable SNR/RSSI becomes more trusted; very weak
+   * receptions make the companion more conservative.
+   */
+  void recordHeard(const uint8_t pubkey_prefix[6], int8_t snr_x4, int8_t rssi_dbm, uint32_t now_ms) {
+    Stats* s = getOrCreate(pubkey_prefix);
+    if (!s) return;
+
+    incrementSat(s->heard_count);
+    s->last_heard_ms = now_ms;
+    s->last_score_update_ms = now_ms;
+    s->snr_ewma_x4 = ewmaI8(s->snr_ewma_x4, snr_x4);
+    s->rssi_ewma_dbm = ewmaI8(s->rssi_ewma_dbm, rssi_dbm);
+
+    if (snr_x4 >= 16) {           // >= +4 dB
+      s->score = addSat8(s->score, HEARD_REWARD);
+    } else if (snr_x4 < -24) {    // < -6 dB
+      s->score = subSat8(s->score, 4);
+    }
+  }
+
   uint8_t getScore(const uint8_t pubkey_prefix[6], uint8_t out_path_len, uint32_t now_ms = 0) {
     Stats* s = getOrCreate(pubkey_prefix);
     if (!s) return DEFAULT_SCORE;
@@ -289,8 +319,10 @@ private:
     uint32_t oldest_activity = 0xFFFFFFFF;
 
     for (uint8_t i = 0; i < MAX_ENTRIES; i++) {
-      uint32_t activity = max(_entries[i].last_send_ms, _entries[i].last_success_ms);
-      activity = max(activity, _entries[i].last_fail_ms);
+      uint32_t activity = _entries[i].last_send_ms;
+      if (_entries[i].last_success_ms > activity) activity = _entries[i].last_success_ms;
+      if (_entries[i].last_fail_ms > activity) activity = _entries[i].last_fail_ms;
+      if (_entries[i].last_heard_ms > activity) activity = _entries[i].last_heard_ms;
       if (activity < oldest_activity && _entries[i].fail_streak > 0) {
         oldest_activity = activity;
         idx = i;
@@ -332,11 +364,24 @@ private:
       score = subSat8(score, fail_penalty);
     }
 
+    // Passive link-quality scoring. Strong heard packets legalistically improve
+    // usable range by improving route confidence, not by raising TX power.
+    if (s.heard_count > 0) {
+      if (s.snr_ewma_x4 >= 16) score = addSat8(score, 6);        // >= +4 dB
+      else if (s.snr_ewma_x4 >= 0) score = addSat8(score, 2);    // 0..+4 dB
+      else if (s.snr_ewma_x4 < -32) score = subSat8(score, 10);  // < -8 dB
+      else if (s.snr_ewma_x4 < -16) score = subSat8(score, 5);   // < -4 dB
+    }
+
     // Age decay: stale paths should not be trusted forever.
     if (now_ms && s.last_success_ms) {
       uint32_t age = now_ms - s.last_success_ms;
       if (age > VERY_STALE_PATH_MS) score = subSat8(score, 22);
       else if (age > STALE_PATH_MS) score = subSat8(score, 10);
+    }
+    if (now_ms && s.last_heard_ms) {
+      uint32_t heard_age = now_ms - s.last_heard_ms;
+      if (heard_age > STALE_HEARD_MS) score = subSat8(score, 6);
     }
 
     // Simple UCB-like exploration bonus. Low-sample paths should not be starved forever.
@@ -383,5 +428,12 @@ private:
     uint16_t blended = ((uint16_t)old_value * (100 - EWMA_ALPHA_PERCENT)) +
                        ((uint16_t)sample * EWMA_ALPHA_PERCENT);
     return (uint8_t)(blended / 100);
+  }
+
+  static int8_t ewmaI8(int8_t old_value, int8_t sample) {
+    if (old_value == 0) return sample;
+    int16_t blended = ((int16_t)old_value * (100 - EWMA_ALPHA_PERCENT)) +
+                      ((int16_t)sample * EWMA_ALPHA_PERCENT);
+    return (int8_t)(blended / 100);
   }
 };
