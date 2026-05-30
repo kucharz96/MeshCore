@@ -110,18 +110,9 @@ public:
       reliability.recordTimeout(recipient.id.pub_key, now);
     }
 
-    ContactInfo routed = recipient;
-    CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len);
-    if (mode == CompanionReliability::SendModeFloodDiscovery) {
-      routed.out_path_len = OUT_PATH_UNKNOWN;
-    }
-
+    ContactInfo routed = routeForReliability(recipient, now);
     int result = BaseChatMesh::sendMessage(routed, timestamp, attempt, text, expected_ack, est_timeout);
-    if (result != MSG_SEND_FAILED) {
-      CompanionReliability::SendMode recorded_mode =
-          (result == MSG_SEND_SENT_DIRECT) ? CompanionReliability::SendModeDirect : CompanionReliability::SendModeFlood;
-      reliability.recordSend(recipient.id.pub_key, recorded_mode, now);
-    }
+    recordReliabilitySend(recipient, result, now);
     return result;
   }
 
@@ -132,18 +123,43 @@ public:
       reliability.recordTimeout(recipient.id.pub_key, now);
     }
 
-    ContactInfo routed = recipient;
-    CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len);
-    if (mode == CompanionReliability::SendModeFloodDiscovery) {
-      routed.out_path_len = OUT_PATH_UNKNOWN;
-    }
-
+    ContactInfo routed = routeForReliability(recipient, now);
     int result = BaseChatMesh::sendCommandData(routed, timestamp, attempt, text, est_timeout);
-    if (result != MSG_SEND_FAILED) {
-      CompanionReliability::SendMode recorded_mode =
-          (result == MSG_SEND_SENT_DIRECT) ? CompanionReliability::SendModeDirect : CompanionReliability::SendModeFlood;
-      reliability.recordSend(recipient.id.pub_key, recorded_mode, now);
-    }
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendLogin(const ContactInfo& recipient, const char* password, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendLogin(routed, password, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendAnonReq(const ContactInfo& recipient, const uint8_t* data, uint8_t len,
+                  uint32_t& tag, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendAnonReq(routed, data, len, tag, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendRequest(const ContactInfo& recipient, uint8_t req_type, uint32_t& tag, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendRequest(routed, req_type, tag, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendRequest(const ContactInfo& recipient, const uint8_t* req_data, uint8_t data_len,
+                  uint32_t& tag, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendRequest(routed, req_data, data_len, tag, est_timeout);
+    recordReliabilitySend(recipient, result, now);
     return result;
   }
 
@@ -223,6 +239,22 @@ public:
 #endif
 
 private:
+  ContactInfo routeForReliability(const ContactInfo& recipient, uint32_t now) {
+    ContactInfo routed = recipient;
+    CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len, now);
+    if (mode == CompanionReliability::SendModeFloodDiscovery) {
+      routed.out_path_len = OUT_PATH_UNKNOWN;
+    }
+    return routed;
+  }
+
+  void recordReliabilitySend(const ContactInfo& recipient, int result, uint32_t now) {
+    if (result == MSG_SEND_FAILED) return;
+    CompanionReliability::SendMode recorded_mode =
+        (result == MSG_SEND_SENT_DIRECT) ? CompanionReliability::SendModeDirect : CompanionReliability::SendModeFlood;
+    reliability.recordSend(recipient.id.pub_key, recorded_mode, now);
+  }
+
   void writeOKFrame();
   void writeErrFrame(uint8_t err_code);
   void writeDisabledFrame();
