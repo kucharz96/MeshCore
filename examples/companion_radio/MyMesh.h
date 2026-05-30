@@ -105,6 +105,11 @@ public:
 
   int sendMessage(const ContactInfo& recipient, uint32_t timestamp, uint8_t attempt, const char* text,
                   uint32_t& expected_ack, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    if (attempt > 0) {
+      reliability.recordTimeout(recipient.id.pub_key, now);
+    }
+
     ContactInfo routed = recipient;
     CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len);
     if (mode == CompanionReliability::SendModeFloodDiscovery) {
@@ -115,13 +120,18 @@ public:
     if (result != MSG_SEND_FAILED) {
       CompanionReliability::SendMode recorded_mode =
           (result == MSG_SEND_SENT_DIRECT) ? CompanionReliability::SendModeDirect : CompanionReliability::SendModeFlood;
-      reliability.recordSend(recipient.id.pub_key, recorded_mode, _ms->getMillis());
+      reliability.recordSend(recipient.id.pub_key, recorded_mode, now);
     }
     return result;
   }
 
   int sendCommandData(const ContactInfo& recipient, uint32_t timestamp, uint8_t attempt, const char* text,
                       uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    if (attempt > 0) {
+      reliability.recordTimeout(recipient.id.pub_key, now);
+    }
+
     ContactInfo routed = recipient;
     CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len);
     if (mode == CompanionReliability::SendModeFloodDiscovery) {
@@ -132,7 +142,7 @@ public:
     if (result != MSG_SEND_FAILED) {
       CompanionReliability::SendMode recorded_mode =
           (result == MSG_SEND_SENT_DIRECT) ? CompanionReliability::SendModeDirect : CompanionReliability::SendModeFlood;
-      reliability.recordSend(recipient.id.pub_key, recorded_mode, _ms->getMillis());
+      reliability.recordSend(recipient.id.pub_key, recorded_mode, now);
     }
     return result;
   }
