@@ -23,6 +23,7 @@
 #include <SPIFFS.h>
 #endif
 
+#include "CompanionReliability.h"
 #include "DataStore.h"
 #include "NodePrefs.h"
 
@@ -76,6 +77,9 @@
 #define REQ_TYPE_KEEP_ALIVE             0x02
 #define REQ_TYPE_GET_TELEMETRY_DATA     0x03
 
+void companionReliabilityAckCleared(void* ack_value);
+inline int8_t companionReliabilityClampI8(int value);
+
 struct AdvertPath {
   uint8_t pubkey_prefix[7];
   uint8_t path_len;
@@ -101,6 +105,66 @@ public:
   void enterCLIRescue();
 
   int  getRecentlyHeard(AdvertPath dest[], int max_num);
+
+  int sendMessage(const ContactInfo& recipient, uint32_t timestamp, uint8_t attempt, const char* text,
+                  uint32_t& expected_ack, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    if (attempt > 0) {
+      reliability.recordTimeout(recipient.id.pub_key, now);
+    }
+
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendMessage(routed, timestamp, attempt, text, expected_ack, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendCommandData(const ContactInfo& recipient, uint32_t timestamp, uint8_t attempt, const char* text,
+                      uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    if (attempt > 0) {
+      reliability.recordTimeout(recipient.id.pub_key, now);
+    }
+
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendCommandData(routed, timestamp, attempt, text, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendLogin(const ContactInfo& recipient, const char* password, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendLogin(routed, password, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendAnonReq(const ContactInfo& recipient, const uint8_t* data, uint8_t len,
+                  uint32_t& tag, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendAnonReq(routed, data, len, tag, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendRequest(const ContactInfo& recipient, uint8_t req_type, uint32_t& tag, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendRequest(routed, req_type, tag, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
+
+  int sendRequest(const ContactInfo& recipient, const uint8_t* req_data, uint8_t data_len,
+                  uint32_t& tag, uint32_t& est_timeout) {
+    uint32_t now = _ms->getMillis();
+    ContactInfo routed = routeForReliability(recipient, now);
+    int result = BaseChatMesh::sendRequest(routed, req_data, data_len, tag, est_timeout);
+    recordReliabilitySend(recipient, result, now);
+    return result;
+  }
 
 protected:
   float getAirtimeBudgetFactor() const override;
@@ -178,6 +242,57 @@ public:
 #endif
 
 private:
+  struct ReliabilityAckValue {
+    uint32_t value;
+
+    ReliabilityAckValue& operator=(uint32_t v) {
+      if (v == 0 && value != 0) {
+        companionReliabilityAckCleared(this);
+      }
+      value = v;
+      return *this;
+    }
+
+    operator uint32_t() const { return value; }
+  };
+
+  friend void companionReliabilityAckCleared(void* ack_value);
+
+  void recordReliabilityHeard(const ContactInfo& contact) {
+    uint32_t now = _ms->getMillis();
+    int snr_x4 = (int)(_radio->getLastSNR() * 4.0f);
+    int rssi_dbm = (int)_radio->getLastRSSI();
+    reliability.recordHeard(contact.id.pub_key, companionReliabilityClampI8(snr_x4), companionReliabilityClampI8(rssi_dbm), now);
+  }
+
+  void markConnectionActive(const ContactInfo& contact) {
+    recordReliabilityHeard(contact);
+    BaseChatMesh::markConnectionActive(contact);
+  }
+
+  bool shouldHoldFloodDiscoveryForRangeQuality() const {
+    return _radio->isReceiving() || getRemainingTxBudget() == 0;
+  }
+
+  ContactInfo routeForReliability(const ContactInfo& recipient, uint32_t now) {
+    ContactInfo routed = recipient;
+    CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len, now);
+    if (mode == CompanionReliability::SendModeFloodDiscovery) {
+      if (recipient.out_path_len != OUT_PATH_UNKNOWN && shouldHoldFloodDiscoveryForRangeQuality()) {
+        return routed;
+      }
+      routed.out_path_len = OUT_PATH_UNKNOWN;
+    }
+    return routed;
+  }
+
+  void recordReliabilitySend(const ContactInfo& recipient, int result, uint32_t now) {
+    if (result == MSG_SEND_FAILED) return;
+    CompanionReliability::SendMode recorded_mode =
+        (result == MSG_SEND_SENT_DIRECT) ? CompanionReliability::SendModeDirect : CompanionReliability::SendModeFlood;
+    reliability.recordSend(recipient.id.pub_key, recorded_mode, now);
+  }
+
   void writeOKFrame();
   void writeErrFrame(uint8_t err_code);
   void writeDisabledFrame();
@@ -185,7 +300,7 @@ private:
   void updateContactFromFrame(ContactInfo &contact, uint32_t& last_mod, const uint8_t *frame, int len);
   void addToOfflineQueue(const uint8_t frame[], int len);
   int getFromOfflineQueue(uint8_t frame[]);
-  int getBlobByKey(const uint8_t key[], int key_len, uint8_t dest_buf[]) override { 
+  int getBlobByKey(const uint8_t key[], int key_len, uint8_t dest_buf[]) override {
     return _store->getBlobByKey(key, key_len, dest_buf);
   }
   bool putBlobByKey(const uint8_t key[], int key_len, const uint8_t src_buf[], int len) override {
@@ -222,6 +337,7 @@ private:
   unsigned long dirty_contacts_expiry;
 
   TransportKey send_scope;
+  CompanionReliability reliability;
 
   uint8_t cmd_frame[MAX_FRAME_SIZE + 1];
   uint8_t out_frame[MAX_FRAME_SIZE + 1];
@@ -238,8 +354,10 @@ private:
 
   struct AckTableEntry {
     unsigned long msg_sent;
-    uint32_t ack;
+    ReliabilityAckValue ack;
     ContactInfo* contact;
+    CompanionReliability::SendMode send_mode;
+    uint8_t pubkey_prefix[6];
   };
   #define EXPECTED_ACK_TABLE_SIZE 8
   AckTableEntry expected_ack_table[EXPECTED_ACK_TABLE_SIZE]; // circular table
@@ -250,3 +368,25 @@ private:
 };
 
 extern MyMesh the_mesh;
+
+inline int8_t companionReliabilityClampI8(int value) {
+  if (value > 127) return 127;
+  if (value < -128) return -128;
+  return (int8_t)value;
+}
+
+inline void companionReliabilityAckCleared(void* ack_value) {
+  uint32_t now = the_mesh._ms->getMillis();
+  for (int i = 0; i < EXPECTED_ACK_TABLE_SIZE; i++) {
+    if (&the_mesh.expected_ack_table[i].ack == ack_value && the_mesh.expected_ack_table[i].contact != NULL) {
+      uint32_t trip_time = now - the_mesh.expected_ack_table[i].msg_sent;
+      const uint8_t* pubkey = the_mesh.expected_ack_table[i].contact->id.pub_key;
+      the_mesh.reliability.recordAck(pubkey, trip_time, now);
+
+      int snr_x4 = (int)(the_mesh._radio->getLastSNR() * 4.0f);
+      int rssi_dbm = (int)the_mesh._radio->getLastRSSI();
+      the_mesh.reliability.recordHeard(pubkey, companionReliabilityClampI8(snr_x4), companionReliabilityClampI8(rssi_dbm), now);
+      break;
+    }
+  }
+}
