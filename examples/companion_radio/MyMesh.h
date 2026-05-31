@@ -78,6 +78,7 @@
 #define REQ_TYPE_GET_TELEMETRY_DATA     0x03
 
 void companionReliabilityAckCleared(void* ack_value);
+inline int8_t companionReliabilityClampI8(int value);
 
 struct AdvertPath {
   uint8_t pubkey_prefix[7];
@@ -256,6 +257,18 @@ private:
   };
 
   friend void companionReliabilityAckCleared(void* ack_value);
+
+  void recordReliabilityHeard(const ContactInfo& contact) {
+    uint32_t now = _ms->getMillis();
+    int snr_x4 = (int)(_radio->getLastSNR() * 4.0f);
+    int rssi_dbm = (int)_radio->getLastRSSI();
+    reliability.recordHeard(contact.id.pub_key, companionReliabilityClampI8(snr_x4), companionReliabilityClampI8(rssi_dbm), now);
+  }
+
+  void markConnectionActive(const ContactInfo& contact) {
+    recordReliabilityHeard(contact);
+    BaseChatMesh::markConnectionActive(contact);
+  }
 
   bool shouldHoldFloodDiscoveryForRangeQuality() const {
     return _radio->isReceiving() || getRemainingTxBudget() == 0;
