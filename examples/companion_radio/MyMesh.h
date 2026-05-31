@@ -77,6 +77,8 @@
 #define REQ_TYPE_KEEP_ALIVE             0x02
 #define REQ_TYPE_GET_TELEMETRY_DATA     0x03
 
+void companionReliabilityAckCleared(void* ack_value);
+
 struct AdvertPath {
   uint8_t pubkey_prefix[7];
   uint8_t path_len;
@@ -239,6 +241,20 @@ public:
 #endif
 
 private:
+  struct ReliabilityAckValue {
+    uint32_t value;
+
+    ReliabilityAckValue& operator=(uint32_t v) {
+      if (v == 0 && value != 0) {
+        companionReliabilityAckCleared(this);
+      }
+      value = v;
+      return *this;
+    }
+  };
+
+  friend void companionReliabilityAckCleared(void* ack_value);
+
   ContactInfo routeForReliability(const ContactInfo& recipient, uint32_t now) {
     ContactInfo routed = recipient;
     CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len, now);
@@ -316,7 +332,7 @@ private:
 
   struct AckTableEntry {
     unsigned long msg_sent;
-    uint32_t ack;
+    ReliabilityAckValue ack;
     ContactInfo* contact;
     CompanionReliability::SendMode send_mode;
     uint8_t pubkey_prefix[6];
@@ -330,3 +346,14 @@ private:
 };
 
 extern MyMesh the_mesh;
+
+inline void companionReliabilityAckCleared(void* ack_value) {
+  uint32_t now = the_mesh._ms->getMillis();
+  for (int i = 0; i < EXPECTED_ACK_TABLE_SIZE; i++) {
+    if (&the_mesh.expected_ack_table[i].ack == ack_value && the_mesh.expected_ack_table[i].contact != NULL) {
+      uint32_t trip_time = now - the_mesh.expected_ack_table[i].msg_sent;
+      the_mesh.reliability.recordAck(the_mesh.expected_ack_table[i].contact->id.pub_key, trip_time, now);
+      break;
+    }
+  }
+}
