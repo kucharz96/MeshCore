@@ -251,14 +251,23 @@ private:
       value = v;
       return *this;
     }
+
+    operator uint32_t() const { return value; }
   };
 
   friend void companionReliabilityAckCleared(void* ack_value);
+
+  bool shouldHoldFloodDiscoveryForRangeQuality() const {
+    return _radio->isReceiving() || getRemainingTxBudget() == 0;
+  }
 
   ContactInfo routeForReliability(const ContactInfo& recipient, uint32_t now) {
     ContactInfo routed = recipient;
     CompanionReliability::SendMode mode = reliability.chooseSendMode(recipient.id.pub_key, recipient.out_path_len, now);
     if (mode == CompanionReliability::SendModeFloodDiscovery) {
+      if (recipient.out_path_len != OUT_PATH_UNKNOWN && shouldHoldFloodDiscoveryForRangeQuality()) {
+        return routed;
+      }
       routed.out_path_len = OUT_PATH_UNKNOWN;
     }
     return routed;
