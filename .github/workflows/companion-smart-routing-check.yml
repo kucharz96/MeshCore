@@ -1,0 +1,43 @@
+name: Companion Smart Routing Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'examples/companion_radio/**'
+      - 'src/**'
+      - 'variants/**'
+      - 'platformio.ini'
+      - '.github/actions/setup-build-environment/**'
+      - '.github/workflows/companion-smart-routing-check.yml'
+  push:
+    branches:
+      - companion-smart-routing-official-main
+    paths:
+      - 'examples/companion_radio/**'
+      - 'src/**'
+      - 'variants/**'
+      - 'platformio.ini'
+      - '.github/actions/setup-build-environment/**'
+      - '.github/workflows/companion-smart-routing-check.yml'
+  workflow_dispatch:
+
+jobs:
+  build-companion:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - Heltec_v3_companion_radio_ble
+          - RAK_4631_companion_radio_ble
+
+    steps:
+      - name: Clone Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Build Environment
+        uses: ./.github/actions/setup-build-environment
+
+      - name: Build ${{ matrix.environment }}
+        run: pio run -e ${{ matrix.environment }}
