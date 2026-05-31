@@ -356,12 +356,23 @@ private:
 
 extern MyMesh the_mesh;
 
+inline int8_t companionReliabilityClampI8(int value) {
+  if (value > 127) return 127;
+  if (value < -128) return -128;
+  return (int8_t)value;
+}
+
 inline void companionReliabilityAckCleared(void* ack_value) {
   uint32_t now = the_mesh._ms->getMillis();
   for (int i = 0; i < EXPECTED_ACK_TABLE_SIZE; i++) {
     if (&the_mesh.expected_ack_table[i].ack == ack_value && the_mesh.expected_ack_table[i].contact != NULL) {
       uint32_t trip_time = now - the_mesh.expected_ack_table[i].msg_sent;
-      the_mesh.reliability.recordAck(the_mesh.expected_ack_table[i].contact->id.pub_key, trip_time, now);
+      const uint8_t* pubkey = the_mesh.expected_ack_table[i].contact->id.pub_key;
+      the_mesh.reliability.recordAck(pubkey, trip_time, now);
+
+      int snr_x4 = (int)(the_mesh._radio->getLastSNR() * 4.0f);
+      int rssi_dbm = (int)the_mesh._radio->getLastRSSI();
+      the_mesh.reliability.recordHeard(pubkey, companionReliabilityClampI8(snr_x4), companionReliabilityClampI8(rssi_dbm), now);
       break;
     }
   }
