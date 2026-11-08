@@ -12,6 +12,8 @@ on:
       - 'test/test_loop_timing_metrics/**'
       - 'test/test_ui_battery_voltage_cache/**'
       - 'scripts/check_meshcore_protocol_parity.py'
+      - 'scripts/check_meshcore_upstream_surface.py'
+      - 'test/meshcore_x/**'
       - 'examples/companion_radio/ui-new/UiBatteryVoltageCache.h'
       - 'test/test_ericsson_menu/**'
       - 'test/test_ericsson_contacts/**'
@@ -30,6 +32,10 @@ jobs:
           fetch-depth: 0
       - name: Check official protocol command and reply coverage
         run: python3 scripts/check_meshcore_protocol_parity.py
+      - name: Check original source and all Wio configurations are retained
+        run: python3 scripts/check_meshcore_upstream_surface.py
+      - name: Test regression guard against deliberately broken fixtures
+        run: python3 -m unittest discover -s test/meshcore_x -p 'test_*.py' -v
 
   build:
     runs-on: ubuntu-latest
