@@ -58,7 +58,7 @@ int EricssonMenuScreen::render(DisplayDriver& display) {
 }
 
 bool EricssonMenuScreen::handleInput(char c) {
-  switch (c) {
+  switch (static_cast<unsigned char>(c)) {
     case KEY_UP:
     case KEY_PREV:
       _menu.up();
