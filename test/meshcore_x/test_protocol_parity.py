@@ -48,6 +48,14 @@ class ProtocolParityTests(unittest.TestCase):
         source = 'const char* url = "https://example.org/*"; if (cmd_frame[0] == CMD_APP_START) {}'
         self.assertEqual({"CMD_APP_START"}, dispatched_commands(source))
 
+    def test_string_literal_cannot_mask_removed_dispatch(self):
+        source = 'const char* diagnostic = "if (cmd_frame[0] == CMD_DEVICE_QUERY)";'
+        self.assertEqual(set(), dispatched_commands(source))
+
+    def test_escaped_quotes_and_comment_markers_in_string(self):
+        source = r'const char* msg = "escaped \\" // CMD_APP_START"; if (cmd_frame[0] == CMD_SEND_TXT_MSG) {}'
+        self.assertEqual({"CMD_SEND_TXT_MSG"}, dispatched_commands(source))
+
     def test_parser_handles_spaced_array_index(self):
         source = "if (cmd_frame [ 0 ] == CMD_SEND_TXT_MSG) {}"
         self.assertEqual({"CMD_SEND_TXT_MSG"}, dispatched_commands(source))
