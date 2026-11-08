@@ -881,7 +881,14 @@ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_det
 void UITask::onQueueSizeChanged(int msgcount) {
   _msgcount = msgcount;
   if (msgcount == 0) {
+#if defined(WIO_TRACKER_L1)
+    // The iPhone draining its own message queue must not interrupt somebody
+    // browsing the separate RAM-only Ericsson inbox or contacts on OLED.
+    // Preserve the existing behavior while the legacy preview is visible.
+    if (curr == msg_preview) gotoHomeScreen();
+#else
     gotoHomeScreen();
+#endif
   }
 }
 
