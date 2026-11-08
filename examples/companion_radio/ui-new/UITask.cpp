@@ -2,6 +2,7 @@
 #if defined(WIO_TRACKER_L1)
 #include "EricssonMenuScreen.h"
 #include "EricssonContactsScreen.h"
+#include "EricssonInboxScreen.h"
 #endif
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
@@ -771,6 +772,7 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
 #if defined(WIO_TRACKER_L1)
   ericsson_menu = new EricssonMenuScreen(this);
   ericsson_contacts = new EricssonContactsScreen(this);
+  ericsson_inbox = new EricssonInboxScreen(this);
 #endif
   setCurrScreen(splash);
 }
@@ -780,6 +782,14 @@ void UITask::openEricssonContacts() {
   if (!ericsson_contacts) return;
   static_cast<EricssonContactsScreen*>(ericsson_contacts)->open();
   setCurrScreen(ericsson_contacts);
+}
+#endif
+
+#if defined(WIO_TRACKER_L1)
+void UITask::openEricssonInbox() {
+  if (!ericsson_inbox) return;
+  static_cast<EricssonInboxScreen*>(ericsson_inbox)->open();
+  setCurrScreen(ericsson_inbox);
 }
 #endif
 
@@ -821,6 +831,11 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
   // we only want to show text messages on display, not cli data
   if (!(txt_type == TXT_TYPE_PLAIN || txt_type == TXT_TYPE_SIGNED_PLAIN)) return;
 
+#if defined(WIO_TRACKER_L1)
+  // A separate RAM-only view. Do not change the phone-sync offline queue
+  // or the official on-message preview behavior.
+  _inbox.add(from.name, text, rtc_clock.getCurrentTime(), false);
+#endif
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
   ((MsgPreviewScreen *) msg_preview)->addPreview(path_len, from.name, text);
   setCurrScreen(msg_preview);
@@ -841,6 +856,9 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
 }
 
 void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_details, const char* text) {
+#if defined(WIO_TRACKER_L1)
+  _inbox.add(channel_details.name, text, rtc_clock.getCurrentTime(), true);
+#endif
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
   ((MsgPreviewScreen *) msg_preview)->addPreview(path_len, channel_details.name, text);
   setCurrScreen(msg_preview);
