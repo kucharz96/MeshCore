@@ -93,6 +93,33 @@ TEST(EricssonInboxModel, NewArrivalPreservesSelectedOlderMessageWhenPossible) {
   EXPECT_STREQ("three", inbox.current()->text);
 }
 
+TEST(EricssonInboxModel, OverwrittenSelectedOldestFallsBackToNewArrival) {
+  EricssonInboxModel inbox;
+  for (uint32_t i = 0; i < EricssonInboxModel::Capacity; ++i)
+    inbox.add("Node", "body", i, false);
+  inbox.selectLatest();
+  inbox.previous();  // Oldest retained entry, about to be evicted.
+  ASSERT_EQ(EricssonInboxModel::Capacity - 1u, inbox.selected());
+  ASSERT_EQ(0u, inbox.current()->receivedAt);
+  inbox.add("Node", "new", 16, false);
+  EXPECT_EQ(0u, inbox.selected());
+  ASSERT_NE(nullptr, inbox.current());
+  EXPECT_EQ(16u, inbox.current()->receivedAt);
+  EXPECT_STREQ("new", inbox.current()->text);
+}
+
+TEST(EricssonInboxModel, FullBufferPreservesSelectedMessageIfNotEvicted) {
+  EricssonInboxModel inbox;
+  for (uint32_t i = 0; i < EricssonInboxModel::Capacity; ++i)
+    inbox.add("Node", "body", i, false);
+  inbox.selectLatest();
+  inbox.next();  // Second newest entry.
+  ASSERT_EQ(14u, inbox.current()->receivedAt);
+  inbox.add("Node", "new", 16, false);
+  EXPECT_EQ(2u, inbox.selected());
+  EXPECT_EQ(14u, inbox.current()->receivedAt);
+}
+
 TEST(EricssonInboxModel, MillionArrivalsAndNavigationRemainBounded) {
   EricssonInboxModel inbox;
   for (uint32_t i = 0; i < 1000000u; ++i) {
