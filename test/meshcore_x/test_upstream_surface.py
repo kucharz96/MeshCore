@@ -63,7 +63,7 @@ class UpstreamSurfaceTests(unittest.TestCase):
 
     def test_nonproduction_docs_not_subject_to_source_gate(self):
         self.assertEqual(
-            [], retained_paths({"docs/README.md", "notes.txt"})
+            set(), retained_paths({"docs/README.md", "notes.txt"})
         )
 
     def test_removed_board_configuration_is_rejected(self):
