@@ -88,8 +88,7 @@ void EricssonMenuScreen::activate() {
       _task->showAlert(msg, 1600);
       break;
     case 1:
-      snprintf(msg, sizeof(msg), "Kontakty: %lu", (unsigned long)the_mesh.getNumContacts());
-      _task->showAlert(msg, 1600);
+      _task->openEricssonContacts();
       break;
     case 2:
       snprintf(msg, sizeof(msg), "RX:%lu TX:%lu",
