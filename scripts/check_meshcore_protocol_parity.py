@@ -52,11 +52,10 @@ def protocol_codes(source: str) -> dict[str, int]:
 
 def dispatched_commands(source: str) -> set[str]:
     # Ignore C++ comments without deleting quoted strings containing // or /*.
-    tokens = re.compile(r"""(?s)"[^"]*"|'[^']*'|//[^\n]*|/\*.*?\*/""")
-    cleaned = tokens.sub(
-        lambda match: " " if match.group().startswith(("//", "/*")) else match.group(),
-        source,
-    )
+    tokens = re.compile(r"""(?s)"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*.*?\*/""")
+    # Strings and character literals cannot contain executable dispatch paths.
+    # Strip them too, so diagnostics and test fixtures cannot mask a removal.
+    cleaned = tokens.sub(" ", source)
     return set(CASE_PATTERN.findall(cleaned)) | set(FRAME_BRANCH_PATTERN.findall(cleaned))
 
 
