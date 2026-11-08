@@ -29,6 +29,9 @@ void RadioLibWrapper::begin() {
   _preamble_sf = getSpreadingFactor();
   _radio->setPreambleLength(preambleLengthForSF(_preamble_sf)); // longer preamble for lower SF improves reliability
   state = STATE_IDLE;
+#ifdef MESHCORE_X_RADIO_HEALTH
+  _radio_health.reset();
+#endif
 
   if (_board->getStartupReason() == BD_STARTUP_RX_PACKET) {  // received a LoRa packet (while in deep sleep)
     setFlag(); // LoRa packet is already received
@@ -76,6 +79,9 @@ void RadioLibWrapper::resetAGC() {
   if ((state & STATE_INT_READY) != 0 || isReceivingPacket()) return;
 
   doResetAGC();
+#ifdef MESHCORE_X_RADIO_HEALTH
+  _radio_health.recordAgcReset();
+#endif
   state = STATE_IDLE;   // trigger a startReceive()
 
   // Reset noise floor sampling so it reconverges from scratch.
@@ -117,6 +123,9 @@ void RadioLibWrapper::startRecv() {
   if (err == RADIOLIB_ERR_NONE) {
     state = STATE_RX;
   } else {
+#ifdef MESHCORE_X_RADIO_HEALTH
+    _radio_health.recordRxArmError();
+#endif
     MESH_DEBUG_PRINTLN("RadioLibWrapper: error: startReceive(%d)", err);
   }
 }
@@ -136,6 +145,9 @@ int RadioLibWrapper::recvRaw(uint8_t* bytes, int sz) {
         MESH_DEBUG_PRINTLN("RadioLibWrapper: error: readData(%d)", err);
         len = 0;
         n_recv_errors++;
+#ifdef MESHCORE_X_RADIO_HEALTH
+        _radio_health.recordRxReadError();
+#endif
       } else {
       //  Serial.print("  readData() -> "); Serial.println(len);
         n_recv++;
@@ -153,6 +165,9 @@ int RadioLibWrapper::recvRaw(uint8_t* bytes, int sz) {
     if (err == RADIOLIB_ERR_NONE) {
       state = STATE_RX;
     } else {
+#ifdef MESHCORE_X_RADIO_HEALTH
+      _radio_health.recordRxArmError();
+#endif
       MESH_DEBUG_PRINTLN("RadioLibWrapper: error: startReceive(%d)", err);
     }
   }
@@ -171,6 +186,9 @@ bool RadioLibWrapper::startSendRaw(const uint8_t* bytes, int len) {
     return true;
   }
   MESH_DEBUG_PRINTLN("RadioLibWrapper: error: startTransmit(%d)", err);
+#ifdef MESHCORE_X_RADIO_HEALTH
+  _radio_health.recordTxStartError();
+#endif
   idle();   // trigger another startRecv()
   _board->onAfterTransmit();
   return false;

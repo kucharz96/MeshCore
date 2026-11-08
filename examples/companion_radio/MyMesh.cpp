@@ -2181,6 +2181,20 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
   }
 #endif
 
+#ifdef MESHCORE_X_RADIO_HEALTH
+  // Uses the existing Companion CLI request/reply frames; no BLE protocol
+  // extensions and no unsolicited radio debug traffic.
+  if (strcmp(command, "get x.radio") == 0) {
+    const RadioHealthSnapshot health = radio_driver.getRadioHealthSnapshot();
+    snprintf(reply, 120, "> rx_arm=%lu rx_read=%lu tx_start=%lu agc=%lu",
+             (unsigned long)health.rx_arm_errors,
+             (unsigned long)health.rx_read_errors,
+             (unsigned long)health.tx_start_errors,
+             (unsigned long)health.agc_resets);
+    return true;
+  }
+#endif
+
   if (strcmp(command, "board") == 0) {
     strcpy(reply, board.getManufacturerName());
     return true;
