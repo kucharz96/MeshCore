@@ -1,6 +1,7 @@
 #include "UITask.h"
 #if defined(WIO_TRACKER_L1)
 #include "EricssonMenuScreen.h"
+#include "EricssonContactsScreen.h"
 #endif
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
@@ -769,9 +770,18 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   msg_preview = new MsgPreviewScreen(this, &rtc_clock);
 #if defined(WIO_TRACKER_L1)
   ericsson_menu = new EricssonMenuScreen(this);
+  ericsson_contacts = new EricssonContactsScreen(this);
 #endif
   setCurrScreen(splash);
 }
+
+#if defined(WIO_TRACKER_L1)
+void UITask::openEricssonContacts() {
+  if (!ericsson_contacts) return;
+  static_cast<EricssonContactsScreen*>(ericsson_contacts)->open();
+  setCurrScreen(ericsson_contacts);
+}
+#endif
 
 void UITask::showAlert(const char* text, int duration_millis) {
   strcpy(_alert, text);
