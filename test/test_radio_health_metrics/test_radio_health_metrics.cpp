@@ -63,3 +63,8 @@ TEST(RadioHealthMetrics, HandlesMillionIndependentEvents) {
   EXPECT_EQ(250000u, snapshot.tx_start_errors);
   EXPECT_EQ(125000u, snapshot.agc_resets);
 }
+
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
