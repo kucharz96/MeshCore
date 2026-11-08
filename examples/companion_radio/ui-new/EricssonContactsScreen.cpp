@@ -4,6 +4,7 @@
 
 #include "UITask.h"
 #include "../MyMesh.h"
+#include <target.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -27,7 +28,6 @@ const char* contactType(uint8_t type) {
     case ADV_TYPE_CHAT: return "Companion";
     case ADV_TYPE_REPEATER: return "Repeater";
     case ADV_TYPE_ROOM: return "Room";
-    case ADV_TYPE_SENSOR: return "Sensor";
     default: return "Inny";
   }
 }
