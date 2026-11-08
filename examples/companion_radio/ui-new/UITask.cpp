@@ -1,4 +1,7 @@
 #include "UITask.h"
+#if defined(WIO_TRACKER_L1)
+#include "EricssonMenuScreen.h"
+#endif
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
 #include "target.h"
@@ -623,6 +626,14 @@ public:
       return true;
     }
 #endif
+#if defined(WIO_TRACKER_L1)
+    // On the compact OLED, pressing the joystick opens the phone-style menu
+    // without changing the original sideways HomeScreen pages.
+    if (c == KEY_ENTER && _page == HomePage::FIRST) {
+      _task->openEricssonMenu();
+      return true;
+    }
+#endif
     return false;
   }
 };
@@ -756,6 +767,9 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   splash = new SplashScreen(this);
   home = new HomeScreen(this, &rtc_clock, sensors, node_prefs);
   msg_preview = new MsgPreviewScreen(this, &rtc_clock);
+#if defined(WIO_TRACKER_L1)
+  ericsson_menu = new EricssonMenuScreen(this);
+#endif
   setCurrScreen(splash);
 }
 
@@ -929,6 +943,18 @@ void UITask::loop() {
   } else if (ev == BUTTON_EVENT_LONG_PRESS) {
     c = handleLongPress(KEY_ENTER);  // REVISIT: could be mapped to different key code
   }
+#if defined(WIO_TRACKER_L1)
+  // Wio L1 uses dedicated digital pins for all five joystick directions.
+  // These are configured INPUT_PULLUP by WioTrackerL1Board::begin().
+  ev = joystick_up.check();
+  if (ev == BUTTON_EVENT_CLICK) {
+    c = checkDisplayOn(KEY_UP);
+  }
+  ev = joystick_down.check();
+  if (ev == BUTTON_EVENT_CLICK) {
+    c = checkDisplayOn(KEY_DOWN);
+  }
+#endif
   ev = joystick_left.check();
   if (ev == BUTTON_EVENT_CLICK) {
     c = checkDisplayOn(KEY_LEFT);
@@ -942,6 +968,11 @@ void UITask::loop() {
     c = handleLongPress(KEY_RIGHT);
   }
   ev = back_btn.check();
+#if defined(WIO_TRACKER_L1)
+  if (ev == BUTTON_EVENT_CLICK) {
+    c = checkDisplayOn(KEY_CANCEL);
+  } else
+#endif
   if (ev == BUTTON_EVENT_TRIPLE_CLICK) {
     c = handleTripleClick(KEY_SELECT);
   }
