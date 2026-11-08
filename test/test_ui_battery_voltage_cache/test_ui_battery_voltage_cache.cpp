@@ -61,6 +61,54 @@ TEST(UiBatteryVoltageCache, MillionRedrawsDoNotRequireMillionSamples) {
   EXPECT_EQ(3900u, cache.value());
 }
 
+
+TEST(UiBatteryVoltageCache, DelayedAdcCompletionStartsFreshnessAtCompletion) {
+  UiBatteryVoltageCache cache;
+  const uint32_t readStartMs = 1000;
+  EXPECT_TRUE(cache.needsSample(readStartMs));
+  // ADC setup and sampling are blocking; timestamp only after completion.
+  cache.store(readStartMs + 15, 3850);
+  EXPECT_FALSE(cache.needsSample(readStartMs + 5014));
+  EXPECT_TRUE(cache.needsSample(readStartMs + 5015));
+}
+
+TEST(UiBatteryVoltageCache, RepeatedInvalidationsNeverServeStaleSample) {
+  UiBatteryVoltageCache cache;
+  for (uint32_t cycle = 0; cycle < 100000; ++cycle) {
+    cache.store(cycle, static_cast<uint16_t>(3000 + cycle % 1000));
+    EXPECT_TRUE(cache.hasValue());
+    cache.invalidate();
+    EXPECT_FALSE(cache.hasValue());
+    EXPECT_TRUE(cache.needsSample(cycle));
+  }
+}
+
+TEST(UiBatteryVoltageCache, FaultInjectionDroppedReadsRetainLastGoodSample) {
+  UiBatteryVoltageCache cache;
+  cache.store(0, 3900);
+  // Simulate a higher-level ADC read failure by not calling store().
+  // The cache must continue requesting a fresh sample, while preserving
+  // its last displayed value. Actual ADC failure detection is external.
+  for (uint32_t now = 5000; now < 15000; now += 100) {
+    EXPECT_TRUE(cache.needsSample(now));
+    EXPECT_EQ(3900u, cache.value());
+  }
+  cache.store(15000, 3750);
+  EXPECT_FALSE(cache.needsSample(15001));
+  EXPECT_EQ(3750u, cache.value());
+}
+
+TEST(UiBatteryVoltageCache, MillisRolloverWithRepeatedSampling) {
+  UiBatteryVoltageCache cache;
+  uint32_t now = UINT32_MAX - 12000u;
+  for (unsigned i = 0; i < 1000; ++i) {
+    EXPECT_TRUE(cache.needsSample(now));
+    cache.store(now, 3800);
+    EXPECT_FALSE(cache.needsSample(now + 4999u));
+    now += UiBatteryVoltageCache::RefreshMs;
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
