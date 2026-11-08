@@ -290,16 +290,43 @@ void setup() {
 }
 
 void loop() {
+#if defined(WIO_TRACKER_L1)
+  const uint32_t startUs = micros();
+#endif
   the_mesh.loop();
+#if defined(WIO_TRACKER_L1)
+  const uint32_t meshDoneUs = micros();
+#endif
   interface_manager.loop();
+#if defined(WIO_TRACKER_L1)
+  const uint32_t interfaceDoneUs = micros();
+#endif
   sensors.loop();
+#if defined(WIO_TRACKER_L1)
+  const uint32_t sensorsDoneUs = micros();
+#endif
 #ifdef DISPLAY_CLASS
   ui_task.loop();
+#endif
+#if defined(WIO_TRACKER_L1)
+  const uint32_t uiDoneUs = micros();
 #endif
   rtc_clock.tick();
   board.loop();
 #ifdef HAS_EXTERNAL_WATCHDOG
   external_watchdog.loop();
+#endif
+#if defined(WIO_TRACKER_L1)
+  const uint32_t endUs = micros();
+  // Active work only. Do not count board.sleep() as an expensive stall.
+  // The per-stage values allow distinguishing UI blocking from radio work.
+  loop_timing_metrics.record(
+      LoopTimingMetrics::elapsedUs(startUs, meshDoneUs),
+      LoopTimingMetrics::elapsedUs(meshDoneUs, interfaceDoneUs),
+      LoopTimingMetrics::elapsedUs(interfaceDoneUs, sensorsDoneUs),
+      LoopTimingMetrics::elapsedUs(sensorsDoneUs, uiDoneUs),
+      LoopTimingMetrics::elapsedUs(uiDoneUs, endUs),
+      LoopTimingMetrics::elapsedUs(startUs, endUs));
 #endif
 
   if (!the_mesh.hasPendingWork()) {

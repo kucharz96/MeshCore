@@ -1,15 +1,48 @@
 name: MeshCore X Ericsson Wio CI
 
+# Only the newest commit on a PR needs firmware builds. This prevents a burst
+# of iterative commits from leaving long queues of stale, expensive jobs.
+concurrency:
+  group: meshcore-x-wio-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     paths:
       - 'variants/wio-tracker-l1/**'
       - 'examples/companion_radio/ui-new/**'
+      - 'examples/companion_radio/main.cpp'
+      - 'examples/companion_radio/MyMesh.cpp'
+      - 'examples/companion_radio/MyMesh.h'
+      - 'examples/companion_radio/LoopTimingMetrics.h'
+      - 'test/test_loop_timing_metrics/**'
+      - 'test/test_ui_battery_voltage_cache/**'
+      - 'scripts/check_meshcore_protocol_parity.py'
+      - 'scripts/check_meshcore_upstream_surface.py'
+      - 'test/meshcore_x/**'
+      - 'examples/companion_radio/ui-new/UiBatteryVoltageCache.h'
       - 'test/test_ericsson_menu/**'
+      - 'test/test_ericsson_contacts/**'
+      - 'test/test_ericsson_inbox/**'
       - '.github/workflows/meshcore-x-ericsson-wio.yml'
   workflow_dispatch:
 
 jobs:
+  protocol-parity:
+    name: Official MeshCore Companion protocol parity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with official baseline history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Check official protocol command and reply coverage
+        run: python3 scripts/check_meshcore_protocol_parity.py
+      - name: Check original source and all Wio configurations are retained
+        run: python3 scripts/check_meshcore_upstream_surface.py
+      - name: Test regression guard against deliberately broken fixtures
+        run: python3 -m unittest discover -s test/meshcore_x -p 'test_*.py' -v
+
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -18,6 +51,9 @@ jobs:
         environment:
           - WioTrackerL1_companion_radio_ble
           - WioTrackerL1_companion_radio_usb
+          - WioTrackerL1_repeater
+          - WioTrackerL1_room_server
+          - WioTrackerL1_kiss_modem
     steps:
       - name: Checkout
         uses: actions/checkout@v6

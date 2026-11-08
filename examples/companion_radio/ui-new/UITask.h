@@ -21,6 +21,9 @@
 
 #include "../AbstractUITask.h"
 #include "../NodePrefs.h"
+#if defined(WIO_TRACKER_L1)
+  #include "EricssonInboxModel.h"
+#endif
 
 #ifdef UI_NO_DISCOVER_SCREEN
   #error "UI_NO_DISCOVER_SCREEN is obsolete - use -D UI_DISCOVER_SCREEN=0 instead"
@@ -78,6 +81,8 @@ class UITask : public AbstractUITask {
 #if defined(WIO_TRACKER_L1)
   UIScreen* ericsson_menu;
   UIScreen* ericsson_contacts;
+  UIScreen* ericsson_inbox;
+  EricssonInboxModel _inbox;
 #endif
   UIScreen* curr;
 
@@ -105,6 +110,8 @@ public:
 #if defined(WIO_TRACKER_L1)
   void openEricssonMenu() { if (ericsson_menu) setCurrScreen(ericsson_menu); }
   void openEricssonContacts();
+  void openEricssonInbox();
+  EricssonInboxModel& inbox() { return _inbox; }
 #endif
   void showAlert(const char* text, int duration_millis);
   int  getMsgCount() const { return _msgcount; }

@@ -2,6 +2,8 @@
 #if defined(WIO_TRACKER_L1)
 #include "EricssonMenuScreen.h"
 #include "EricssonContactsScreen.h"
+#include "EricssonInboxScreen.h"
+#include "UiBatteryVoltageCache.h"
 #endif
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
@@ -119,6 +121,9 @@ class HomeScreen : public UIScreen {
   uint8_t _page;
   bool _shutdown_init;
   AdvertPath recent[UI_RECENT_LIST_SIZE];
+#if defined(WIO_TRACKER_L1)
+  UiBatteryVoltageCache _uiBatteryCache;
+#endif
 #if UI_DISCOVER_SCREEN
   DiscoveredNode discovered[DISCOVERED_NODES_TABLE_SIZE]; // not circular, latest discovered nodes are not kept
   uint32_t disc_node_req_tag = 0;
@@ -264,8 +269,18 @@ public:
     display.setCursor(0, 2);
     display.print(filtered_name);
 
-    // battery voltage
+    // The Wio L1 ADC conversion includes a deliberate 10 ms settling delay.
+    // Avoid repeating that blocking read on every joystick-triggered redraw.
+    // Low-battery shutdown and other safety checks still use direct samples.
+#if defined(WIO_TRACKER_L1)
+    if (_uiBatteryCache.needsSample(millis())) {
+      const uint16_t measuredMv = _task->getBattMilliVolts();
+      _uiBatteryCache.store(millis(), measuredMv);
+    }
+    renderBatteryIndicator(display, _uiBatteryCache.value());
+#else
     renderBatteryIndicator(display, _task->getBattMilliVolts());
+#endif
 
     // curr page indicator
     if (UIColor::title_bkg == UIColor::window_bkg) {
@@ -771,6 +786,7 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
 #if defined(WIO_TRACKER_L1)
   ericsson_menu = new EricssonMenuScreen(this);
   ericsson_contacts = new EricssonContactsScreen(this);
+  ericsson_inbox = new EricssonInboxScreen(this);
 #endif
   setCurrScreen(splash);
 }
@@ -780,6 +796,14 @@ void UITask::openEricssonContacts() {
   if (!ericsson_contacts) return;
   static_cast<EricssonContactsScreen*>(ericsson_contacts)->open();
   setCurrScreen(ericsson_contacts);
+}
+#endif
+
+#if defined(WIO_TRACKER_L1)
+void UITask::openEricssonInbox() {
+  if (!ericsson_inbox) return;
+  static_cast<EricssonInboxScreen*>(ericsson_inbox)->open();
+  setCurrScreen(ericsson_inbox);
 }
 #endif
 
@@ -821,6 +845,11 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
   // we only want to show text messages on display, not cli data
   if (!(txt_type == TXT_TYPE_PLAIN || txt_type == TXT_TYPE_SIGNED_PLAIN)) return;
 
+#if defined(WIO_TRACKER_L1)
+  // A separate RAM-only view. Do not change the phone-sync offline queue
+  // or the official on-message preview behavior.
+  _inbox.add(from.name, text, rtc_clock.getCurrentTime(), false);
+#endif
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
   ((MsgPreviewScreen *) msg_preview)->addPreview(path_len, from.name, text);
   setCurrScreen(msg_preview);
@@ -841,6 +870,9 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
 }
 
 void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_details, const char* text) {
+#if defined(WIO_TRACKER_L1)
+  _inbox.add(channel_details.name, text, rtc_clock.getCurrentTime(), true);
+#endif
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
   ((MsgPreviewScreen *) msg_preview)->addPreview(path_len, channel_details.name, text);
   setCurrScreen(msg_preview);
@@ -863,7 +895,14 @@ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_det
 void UITask::onQueueSizeChanged(int msgcount) {
   _msgcount = msgcount;
   if (msgcount == 0) {
+#if defined(WIO_TRACKER_L1)
+    // The iPhone draining its own message queue must not interrupt somebody
+    // browsing the separate RAM-only Ericsson inbox or contacts on OLED.
+    // Preserve the existing behavior while the legacy preview is visible.
+    if (curr == msg_preview) gotoHomeScreen();
+#else
     gotoHomeScreen();
+#endif
   }
 }
 
