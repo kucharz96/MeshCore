@@ -84,8 +84,7 @@ void EricssonMenuScreen::activate() {
   char msg[64];
   switch (_menu.selected()) {
     case 0:
-      snprintf(msg, sizeof(msg), "Nieprzeczytane: %d", _task->getMsgCount());
-      _task->showAlert(msg, 1600);
+      _task->openEricssonInbox();
       break;
     case 1:
       _task->openEricssonContacts();
