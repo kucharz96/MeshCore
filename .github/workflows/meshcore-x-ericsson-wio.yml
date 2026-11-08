@@ -1,5 +1,11 @@
 name: MeshCore X Ericsson Wio CI
 
+# Only the newest commit on a PR needs firmware builds. This prevents a burst
+# of iterative commits from leaving long queues of stale, expensive jobs.
+concurrency:
+  group: meshcore-x-wio-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     paths:
