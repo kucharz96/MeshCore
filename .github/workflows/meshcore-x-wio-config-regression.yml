@@ -1,0 +1,21 @@
+name: MeshCore X Wio configuration regression
+
+on:
+  pull_request:
+    paths:
+      - 'variants/wio-tracker-l1/platformio.ini'
+      - 'platformio.ini'
+      - 'test/meshcore_x/**'
+      - '.github/workflows/meshcore-x-wio-config-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-config-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Wio BLE/USB configuration invariants
+        run: python3 -m unittest discover -s test/meshcore_x -p 'test_*.py' -v
