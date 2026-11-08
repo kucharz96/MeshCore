@@ -2,6 +2,9 @@
 
 #include <Mesh.h>
 #include <RadioLib.h>
+#ifdef MESHCORE_X_RADIO_HEALTH
+#include <helpers/radiolib/RadioHealthMetrics.h>
+#endif
 
 #ifdef USE_CC310_HW_CRYPTO
 #include <Adafruit_nRFCrypto.h>
@@ -16,6 +19,9 @@ protected:
   PhysicalLayer* _radio;
   mesh::MainBoard* _board;
   uint32_t n_recv, n_sent, n_recv_errors;
+#ifdef MESHCORE_X_RADIO_HEALTH
+  RadioHealthMetrics _radio_health;
+#endif
   int16_t _noise_floor, _threshold;
   bool _cad_enabled;
   uint16_t _num_floor_samples;
@@ -68,6 +74,9 @@ public:
   uint32_t getPacketsRecv() const { return n_recv; }
   uint32_t getPacketsRecvErrors() const { return n_recv_errors; }
   uint32_t getPacketsSent() const { return n_sent; }
+#ifdef MESHCORE_X_RADIO_HEALTH
+  RadioHealthSnapshot getRadioHealthSnapshot() const { return _radio_health.snapshot(); }
+#endif
   void resetStats() { n_recv = n_sent = n_recv_errors = 0; }
 
   virtual float getLastRSSI() const override;
