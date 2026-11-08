@@ -29,7 +29,9 @@ jobs:
           - Heltec_v3_companion_radio_ble
           - Heltec_v3_repeater
           - Heltec_v3_room_server
-          # nRF52
+          # nRF52 — targeted regression builds for Wio Tracker L1 Pro
+          - WioTrackerL1_companion_radio_ble
+          - WioTrackerL1_companion_radio_usb
           - RAK_4631_companion_radio_ble
           - RAK_4631_companion_radio_ethernet
           - RAK_4631_repeater
