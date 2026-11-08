@@ -3,6 +3,7 @@
 #include "EricssonMenuScreen.h"
 #include "EricssonContactsScreen.h"
 #include "EricssonInboxScreen.h"
+#include "UiBatteryVoltageCache.h"
 #endif
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
@@ -120,6 +121,9 @@ class HomeScreen : public UIScreen {
   uint8_t _page;
   bool _shutdown_init;
   AdvertPath recent[UI_RECENT_LIST_SIZE];
+#if defined(WIO_TRACKER_L1)
+  UiBatteryVoltageCache _uiBatteryCache;
+#endif
 #if UI_DISCOVER_SCREEN
   DiscoveredNode discovered[DISCOVERED_NODES_TABLE_SIZE]; // not circular, latest discovered nodes are not kept
   uint32_t disc_node_req_tag = 0;
@@ -265,8 +269,18 @@ public:
     display.setCursor(0, 2);
     display.print(filtered_name);
 
-    // battery voltage
+    // The Wio L1 ADC conversion includes a deliberate 10 ms settling delay.
+    // Avoid repeating that blocking read on every joystick-triggered redraw.
+    // Low-battery shutdown and other safety checks still use direct samples.
+#if defined(WIO_TRACKER_L1)
+    if (_uiBatteryCache.needsSample(millis())) {
+      const uint16_t measuredMv = _task->getBattMilliVolts();
+      _uiBatteryCache.store(millis(), measuredMv);
+    }
+    renderBatteryIndicator(display, _uiBatteryCache.value());
+#else
     renderBatteryIndicator(display, _task->getBattMilliVolts());
+#endif
 
     // curr page indicator
     if (UIColor::title_bkg == UIColor::window_bkg) {
