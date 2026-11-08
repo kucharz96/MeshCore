@@ -20,7 +20,12 @@ SOURCE_PATH = "examples/companion_radio/MyMesh.cpp"
 HEADER_PATH = "examples/companion_radio/MyMesh.h"
 CODE_PREFIXES = ("CMD_", "RESP_CODE_", "PUSH_CODE_", "STATS_TYPE_", "ERR_CODE_")
 DEFINE_PATTERN = re.compile(r"^\s*#define\s+([A-Z][A-Z_0-9]+)\s+(0x[0-9a-fA-F]+|[0-9]+)\b", re.MULTILINE)
-CASE_PATTERN = re.compile(r"\bcase\s+(CMD_[A-Z0-9_]+)\s*:")
+CASE_PATTERN = re.compile(r"\\bcase\\s+(CMD_[A-Z0-9_]+)\\s*:")
+# The official Companion dispatches through if / else if against cmd_frame[0],
+# not a switch. The previous case-only matcher silently matched ZERO commands.
+FRAME_BRANCH_PATTERN = re.compile(
+    r"\\bcmd_frame\\s*\\[\\s*0\\s*\\]\\s*==\\s*(CMD_[A-Z0-9_]+)\\b"
+)
 FIRMWARE_PATTERN = re.compile(r"^\s*#define\s+FIRMWARE_VER_CODE\s+(\d+)\b", re.MULTILINE)
 
 
@@ -46,7 +51,7 @@ def protocol_codes(source: str) -> dict[str, int]:
 
 
 def dispatched_commands(source: str) -> set[str]:
-    return set(CASE_PATTERN.findall(source))
+    return set(CASE_PATTERN.findall(source)) | set(FRAME_BRANCH_PATTERN.findall(source))
 
 
 def firmware_version(source: str) -> int:
@@ -74,6 +79,8 @@ def main() -> int:
 
     original_cases = dispatched_commands(official)
     current_cases = dispatched_commands(candidate)
+    if not original_cases:
+        errors.append("baseline parser detected zero official command dispatch paths")
     for name in sorted(original_cases - current_cases):
         errors.append(f"removed official command dispatch: {name}")
 
