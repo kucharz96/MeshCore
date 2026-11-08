@@ -5,6 +5,11 @@ on:
     paths:
       - 'variants/wio-tracker-l1/**'
       - 'examples/companion_radio/ui-new/**'
+      - 'examples/companion_radio/main.cpp'
+      - 'examples/companion_radio/MyMesh.cpp'
+      - 'examples/companion_radio/MyMesh.h'
+      - 'examples/companion_radio/LoopTimingMetrics.h'
+      - 'test/test_loop_timing_metrics/**'
       - 'test/test_ericsson_menu/**'
       - 'test/test_ericsson_contacts/**'
       - 'test/test_ericsson_inbox/**'
