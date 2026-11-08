@@ -32,6 +32,9 @@
 #include <helpers/SimpleMeshTables.h>
 #include <helpers/StaticPoolPacketManager.h>
 #include <target.h>
+#if defined(WIO_TRACKER_L1)
+  #include "LoopTimingMetrics.h"
+#endif
 
 /* ---------------------------------- CONFIGURATION ------------------------------------- */
 
@@ -291,3 +294,6 @@ private:
 };
 
 extern MyMesh the_mesh;
+#if defined(WIO_TRACKER_L1)
+extern LoopTimingMetrics loop_timing_metrics;
+#endif
