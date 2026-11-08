@@ -1,5 +1,9 @@
 #include "MyMesh.h"
 
+#if defined(WIO_TRACKER_L1)
+LoopTimingMetrics loop_timing_metrics;
+#endif
+
 #include <Arduino.h> // needed for PlatformIO
 #ifdef ENABLE_WIFI_INTERFACE
 #include <WiFi.h>
@@ -2085,6 +2089,26 @@ bool MyMesh::handleCommand(const char* command, uint32_t sender_timestamp, char*
     *reply = 0;
     command += 3;
   }
+
+#if defined(WIO_TRACKER_L1)
+  // Read-only diagnostic over the existing MeshCore CLI command frame.
+  // No new BLE characteristic, outgoing RF packet, or UI polling.
+  if (strcmp(command, "get x.loop") == 0) {
+    const LoopTimingSnapshot v = loop_timing_metrics.snapshot();
+    snprintf(reply, 150, "> loops=%lu max_us=%lu over10=%lu over50=%lu",
+             (unsigned long)v.iterations, (unsigned long)v.maxTotalUs,
+             (unsigned long)v.over10ms, (unsigned long)v.over50ms);
+    return true;
+  }
+  if (strcmp(command, "get x.loop.parts") == 0) {
+    const LoopTimingSnapshot v = loop_timing_metrics.snapshot();
+    snprintf(reply, 150, "> mesh=%lu iface=%lu sensor=%lu ui=%lu other=%lu",
+             (unsigned long)v.maxMeshUs, (unsigned long)v.maxInterfaceUs,
+             (unsigned long)v.maxSensorsUs, (unsigned long)v.maxUiUs,
+             (unsigned long)v.maxOtherUs);
+    return true;
+  }
+#endif
 
   if (_prefs.getRadioPrefs()->handleCommand(command, sender_timestamp, reply)) {  // is radio CLI command?
     if (_prefs.getRadioPrefs()->isDirty()) { savePrefs(); }
