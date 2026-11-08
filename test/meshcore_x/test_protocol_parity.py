@@ -36,6 +36,18 @@ class ProtocolParityTests(unittest.TestCase):
         source = "// CMD_DEVICE_QUERY and CMD_APP_START are supported"
         self.assertEqual(set(), dispatched_commands(source))
 
+    def test_commented_out_dispatch_cannot_mask_removal(self):
+        source = """
+        // if (cmd_frame[0] == CMD_DEVICE_QUERY) {}
+        /* else if (cmd_frame[0] == CMD_APP_START) {} */
+        if (cmd_frame[0] == CMD_SEND_TXT_MSG) {}
+        """
+        self.assertEqual({"CMD_SEND_TXT_MSG"}, dispatched_commands(source))
+
+    def test_comment_markers_inside_literals_do_not_hide_real_dispatch(self):
+        source = 'const char* url = "https://example.org/*"; if (cmd_frame[0] == CMD_APP_START) {}'
+        self.assertEqual({"CMD_APP_START"}, dispatched_commands(source))
+
     def test_parser_handles_spaced_array_index(self):
         source = "if (cmd_frame [ 0 ] == CMD_SEND_TXT_MSG) {}"
         self.assertEqual({"CMD_SEND_TXT_MSG"}, dispatched_commands(source))
