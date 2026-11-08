@@ -28,7 +28,10 @@ public:
   // Copies only a bounded prefix. Does not allocate or touch flash or radio.
   // This is a separate UI cache; the original message remains in MeshCore.
   void add(const char* sender, const char* text, uint32_t receivedAt, bool channel) {
-    // The oldest selected entry is about to be overwritten when full.\n    // Move to the incoming message instead of silently showing another entry.\n    const bool selectedWillBeOverwritten = _count == Capacity && _selected == Capacity - 1u;\n    Entry& e = _entries[_next];
+    // The oldest selected entry is about to be overwritten when full.
+    // Move to the incoming message instead of silently showing another entry.
+    const bool selectedWillBeOverwritten = _count == Capacity && _selected == Capacity - 1u;
+    Entry& e = _entries[_next];
     e.receivedAt = receivedAt;
     e.channel = channel;
     copyLimited(e.sender, SenderBytes, sender);
@@ -37,7 +40,8 @@ public:
     if (_count < Capacity) ++_count;
     // Keep the same selected message when new messages arrive during browsing
     // (unless the circular buffer has overwritten it).
-    if (selectedWillBeOverwritten) _selected = 0;\n    else if (_selected < _count - 1u) ++_selected;
+    if (selectedWillBeOverwritten) _selected = 0;
+    else if (_selected < _count - 1u) ++_selected;
   }
 
   void selectLatest() { _selected = 0; }
