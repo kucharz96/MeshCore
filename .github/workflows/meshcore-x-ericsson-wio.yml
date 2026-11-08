@@ -39,6 +39,9 @@ jobs:
         environment:
           - WioTrackerL1_companion_radio_ble
           - WioTrackerL1_companion_radio_usb
+          - WioTrackerL1_repeater
+          - WioTrackerL1_room_server
+          - WioTrackerL1_kiss_modem
     steps:
       - name: Checkout
         uses: actions/checkout@v6
