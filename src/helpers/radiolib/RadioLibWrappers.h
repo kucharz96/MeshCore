@@ -2,6 +2,13 @@
 
 #include <Mesh.h>
 #include <RadioLib.h>
+// Enabled only on the Wio Tracker L1 Pro BLE/USB Companion builds.
+// Other platforms and roles retain the original wrapper layout.
+#if defined(WIO_TRACKER_L1) && (defined(BLE_PIN_CODE) || defined(ENABLE_USB_INTERFACE))
+#ifndef MESHCORE_X_RADIO_HEALTH
+#define MESHCORE_X_RADIO_HEALTH 1
+#endif
+#endif
 #ifdef MESHCORE_X_RADIO_HEALTH
 #include <helpers/radiolib/RadioHealthMetrics.h>
 #endif
