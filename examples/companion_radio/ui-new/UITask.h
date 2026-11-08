@@ -77,6 +77,7 @@ class UITask : public AbstractUITask {
   UIScreen* msg_preview;
 #if defined(WIO_TRACKER_L1)
   UIScreen* ericsson_menu;
+  UIScreen* ericsson_contacts;
 #endif
   UIScreen* curr;
 
@@ -103,6 +104,7 @@ public:
   void gotoHomeScreen() { setCurrScreen(home); }
 #if defined(WIO_TRACKER_L1)
   void openEricssonMenu() { if (ericsson_menu) setCurrScreen(ericsson_menu); }
+  void openEricssonContacts();
 #endif
   void showAlert(const char* text, int duration_millis);
   int  getMsgCount() const { return _msgcount; }
