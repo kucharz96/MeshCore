@@ -52,7 +52,7 @@ def protocol_codes(source: str) -> dict[str, int]:
 
 def dispatched_commands(source: str) -> set[str]:
     # Ignore C++ comments without deleting quoted strings containing // or /*.
-    tokens = re.compile(r"""(?s)"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\n]*|/\*.*?\*/""")
+    tokens = re.compile(r"""(?s)"[^"]*"|'[^']*'|//[^\n]*|/\*.*?\*/""")
     cleaned = tokens.sub(
         lambda match: " " if match.group().startswith(("//", "/*")) else match.group(),
         source,
