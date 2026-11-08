@@ -51,7 +51,13 @@ def protocol_codes(source: str) -> dict[str, int]:
 
 
 def dispatched_commands(source: str) -> set[str]:
-    return set(CASE_PATTERN.findall(source)) | set(FRAME_BRANCH_PATTERN.findall(source))
+    # Ignore C++ comments without deleting quoted strings containing // or /*.
+    tokens = re.compile(r"""(?s)"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|//[^\n]*|/\*.*?\*/""")
+    cleaned = tokens.sub(
+        lambda match: " " if match.group().startswith(("//", "/*")) else match.group(),
+        source,
+    )
+    return set(CASE_PATTERN.findall(cleaned)) | set(FRAME_BRANCH_PATTERN.findall(cleaned))
 
 
 def firmware_version(source: str) -> int:
